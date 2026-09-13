@@ -1,0 +1,16 @@
+{
+  "name": "secureupload",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "test": "node --experimental-vm-modules node_modules/.bin/jest",
+    "test:core": "node --experimental-vm-modules node_modules/.bin/jest --selectProjects core",
+    "test:validators": "node --experimental-vm-modules node_modules/.bin/jest --selectProjects validators"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0"
+  }
+}
