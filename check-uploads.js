@@ -15,7 +15,13 @@
  */
 import fs from "node:fs";
 import { PipelineContext, ValidationPipeline } from "@secureupload/core";
-import { MagicByteValidator, FilenameSanitizerValidator, MimeMismatchValidator } from "@secureupload/validators";
+import {
+  MagicByteValidator,
+  FilenameSanitizerValidator,
+  MimeMismatchValidator,
+  ZipBombGuardValidator,
+  PolyglotDetectorValidator,
+} from "@secureupload/validators";
 
 const [, , filePath, declaredMimeType] = process.argv;
 
@@ -28,9 +34,12 @@ const buffer = fs.readFileSync(filePath);
 
 const context = new PipelineContext({ filename: filePath, declaredMimeType });
 const pipeline = new ValidationPipeline([
-  MagicByteValidator, 
-  FilenameSanitizerValidator, 
-  MimeMismatchValidator]);
+  MagicByteValidator,
+  FilenameSanitizerValidator,
+  MimeMismatchValidator,
+  ZipBombGuardValidator,
+  PolyglotDetectorValidator,
+]);
 
 await pipeline.run(buffer, context);
 
