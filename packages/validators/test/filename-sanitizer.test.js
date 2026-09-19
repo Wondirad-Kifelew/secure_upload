@@ -35,7 +35,40 @@ describe("FilenameSanitizerValidator", () => {
     expect(rules).toContain("filename-path-traversal");
     expect(findings.find((f) => f.rule === "filename-path-traversal").severity).toBe("extreme");
   });
+  test("flags a percent-encoded traversal sequence", async () => {
+    const findings = await FilenameSanitizerValidator.validate(Buffer.alloc(0), {
+      filename: "%2e%2e%2fetc%2fpasswd",
+    });
+    const finding = findings.find((f) => f.rule === "filename-path-traversal");
+    expect(finding).toBeDefined();
+    expect(finding.details.detectionMethod).toBe("percent-encoded");
+  });
 
+  test("flags a double percent-encoded traversal sequence", async () => {
+    const findings = await FilenameSanitizerValidator.validate(Buffer.alloc(0), {
+      filename: "%252e%252e%252fetc%252fpasswd",
+    });
+    const finding = findings.find((f) => f.rule === "filename-path-traversal");
+    expect(finding).toBeDefined();
+    expect(finding.details.detectionMethod).toBe("percent-encoded");
+  });
+
+  test("flags a Unicode slash-lookalike traversal sequence", async () => {
+    const findings = await FilenameSanitizerValidator.validate(Buffer.alloc(0), {
+      filename: "..\u2215etc\u2215passwd",
+    });
+    const finding = findings.find((f) => f.rule === "filename-path-traversal");
+    expect(finding).toBeDefined();
+    expect(finding.details.detectionMethod).toBe("unicode-slash-lookalike");
+  });
+
+  test("does not false-positive on a legitimate filename containing a percent sign", async () => {
+    const findings = await FilenameSanitizerValidator.validate(Buffer.alloc(0), {
+      filename: "50% off invoice.pdf",
+    });
+    expect(findings.map((f) => f.rule)).not.toContain("filename-path-traversal");
+  });
+  
   test("flags an absolute path", async () => {
     const findings = await FilenameSanitizerValidator.validate(Buffer.alloc(0), {
       filename: "/etc/passwd",

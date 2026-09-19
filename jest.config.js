@@ -19,6 +19,12 @@ export default {
       testEnvironment: "node",
       transform: {},
       testMatch: ["<rootDir>/packages/validators/test/**/*.test.js"]
+    },
+    {
+      displayName: "scanners",
+      testEnvironment: "node",
+      transform: {},
+      testMatch: ["<rootDir>/packages/scanners/test/**/*.test.js"]
     }
   ]
 };

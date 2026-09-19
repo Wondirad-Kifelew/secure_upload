@@ -1,0 +1,13 @@
+{
+  "name": "@secureupload/scanners",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "dependencies": {
+    "@secureupload/core": "*"
+  }
+}
