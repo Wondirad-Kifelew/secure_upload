@@ -7,4 +7,4 @@ export function createFakeScanner({ clean = true, findings = [] } = {}) {
   };
 }
 
-export const FakeScanner = createFakeScanner();
+export const FakeScanner = createFakeScanner(); 
