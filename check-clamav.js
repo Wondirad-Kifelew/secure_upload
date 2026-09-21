@@ -11,6 +11,11 @@ if (!filePath) {
 
 const buffer = fs.readFileSync(filePath);
 
-const result = await scanner.scan(buffer);
-
-console.log(result);
+try {
+  const result = await scanner.scan(buffer);
+  console.log(JSON.stringify(result, null, 2));
+} catch (err) {
+  console.error("Scan failed:", err.message);
+  console.error("(Is clamd actually running? Try: sudo systemctl status clamav-daemon)");
+  process.exit(1);
+}
