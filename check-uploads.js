@@ -15,6 +15,7 @@
  */
 import fs from "node:fs";
 import { PipelineContext, ValidationPipeline } from "@secureupload/core";
+import { QuarantinePipeline, QuarantineStore } from "@secureupload/quarantine";
 import {
   MagicByteValidator,
   FilenameSanitizerValidator,
@@ -41,7 +42,10 @@ const pipeline = new ValidationPipeline([
   PolyglotDetectorValidator,
 ]);
 
-await pipeline.run(buffer, context);
+const result = await new QuarantinePipeline({
+  stages: [pipeline],
+  store: new QuarantineStore(),
+}).run(buffer, context);
 
 console.log(`\n${filePath}  (claiming to be: ${declaredMimeType})`);
 if (context.hasFindings) {
@@ -51,3 +55,5 @@ if (context.hasFindings) {
 } else {
   console.log("  clean — nothing flagged");
 }
+console.log(`  quarantined as: ${result.record.id}`);
+console.log(`  suspicion score: ${result.decision.suspicionScore}`);
