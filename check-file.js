@@ -1,6 +1,6 @@
 /**
  * Runs a file through the WHOLE pipeline at once: all 5 validators,
- * then both real scanners (ClamAV, YARA) 
+ * both real scanners (ClamAV, YARA) also a CDR
  *
  * Usage:
  *   node check-file.js <path-to-file> <declared-mime-type>
@@ -9,6 +9,7 @@
  *   node check-file.js uploads/sample-real.png image/png
  */
 import fs from "node:fs";
+import path from "node:path";
 import { PipelineContext, ValidationPipeline } from "@secureupload/core";
 import {
   MagicByteValidator,
@@ -18,6 +19,7 @@ import {
   PolyglotDetectorValidator,
 } from "@secureupload/validators";
 import { ScanPipeline, createClamAVScanner, createYaraScanner } from "@secureupload/scanners";
+import { ImageSanitizer } from "@secureupload/cdr";
 
 const CLAMD_SOCKET_PATH = "/var/run/clamav/clamd.ctl";
 const YARA_RULES_PATH = "packages/scanners/test/fixtures/test-rules.yar";
@@ -58,6 +60,23 @@ for (const scanner of scanners) {
   }
 }
 
+// Stage 3: CDR — rebuild a clean copy (images)
+let sanitizedInfo = null;
+if (declaredMimeType.startsWith("image/")) {
+  try {
+    const result = await ImageSanitizer.sanitize(buffer);
+    for (const finding of result.findings) {
+      context.addFinding({ ...finding, stage: "cdr", source: ImageSanitizer.name });
+    }
+    const { dir, name, ext } = path.parse(filePath);
+    const outPath = path.join(dir, `${name}.sanitized${ext}`);
+    fs.writeFileSync(outPath, result.buffer);
+    sanitizedInfo = `${outPath} (${buffer.length} → ${result.buffer.length} bytes)`;
+  } catch (err) {
+    console.warn(`  [warning] ${ImageSanitizer.name} could not run: ${err.message}`);
+  }
+}
+
 // One combined report — the whole point of merging these scripts
 console.log(`\n${filePath}  (claiming to be: ${declaredMimeType})`);
 if (context.hasFindings) {
@@ -66,4 +85,8 @@ if (context.hasFindings) {
   }
 } else {
   console.log("  clean — nothing flagged by any validator or scanner");
+}
+
+if (sanitizedInfo) {
+  console.log(`\n  sanitized copy written to: ${sanitizedInfo}`);
 }
