@@ -25,6 +25,12 @@ export default {
       testEnvironment: "node",
       transform: {},
       testMatch: ["<rootDir>/packages/scanners/test/**/*.test.js"]
+    },
+    {
+      displayName: "cdr",
+      testEnvironment: "node",
+      transform: {},
+      testMatch: ["<rootDir>/packages/cdr/test/**/*.test.js"]
     }
   ]
 };
