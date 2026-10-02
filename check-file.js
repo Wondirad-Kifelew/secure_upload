@@ -17,6 +17,7 @@ import {
   MimeMismatchValidator,
   ZipBombGuardValidator,
   PolyglotDetectorValidator,
+  ZipSlipGuardValidator,
 } from "@secureupload/validators";
 import { ScanPipeline, createClamAVScanner, createYaraScanner } from "@secureupload/scanners";
 import { ImageSanitizer } from "@secureupload/cdr";
@@ -41,6 +42,7 @@ const validationPipeline = new ValidationPipeline([
   MimeMismatchValidator,
   ZipBombGuardValidator,
   PolyglotDetectorValidator,
+  ZipSlipGuardValidator,
 ]);
 await validationPipeline.run(buffer, context);
 
