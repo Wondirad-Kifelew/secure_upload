@@ -20,7 +20,7 @@ import {
   ZipSlipGuardValidator,
 } from "@secureupload/validators";
 import { ScanPipeline, createClamAVScanner, createYaraScanner } from "@secureupload/scanners";
-import { ImageSanitizer } from "@secureupload/cdr";
+import { ImageSanitizer, PdfSanitizer } from "@secureupload/cdr";
 
 const CLAMD_SOCKET_PATH = "/var/run/clamav/clamd.ctl";
 const YARA_RULES_PATH = "packages/scanners/test/fixtures/test-rules.yar";
@@ -76,6 +76,24 @@ if (declaredMimeType.startsWith("image/")) {
     sanitizedInfo = `${outPath} (${buffer.length} → ${result.buffer.length} bytes)`;
   } catch (err) {
     console.warn(`  [warning] ${ImageSanitizer.name} could not run: ${err.message}`);
+  }
+}
+
+// Stage 4: CDR — PDF
+if (declaredMimeType === "application/pdf") {
+  try {
+    const result = await PdfSanitizer.sanitize(buffer);
+    for (const finding of result.findings) {
+      context.addFinding({ ...finding, stage: "cdr", source: PdfSanitizer.name });
+    }
+    const { dir, name, ext } = path.parse(filePath);
+    const outPath = path.join(dir, `${name}.sanitized${ext}`);
+    fs.writeFileSync(outPath, result.buffer);
+    sanitizedInfo = sanitizedInfo
+      ? `${sanitizedInfo}\n  sanitized copy written to: ${outPath}`
+      : `${outPath} (${buffer.length} → ${result.buffer.length} bytes)`;
+  } catch (err) {
+    console.warn(`  [warning] ${PdfSanitizer.name} could not run: ${err.message}`);
   }
 }
 

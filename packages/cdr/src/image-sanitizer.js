@@ -70,3 +70,4 @@ export function createImageSanitizer({ outputFormat } = {}) {
 }
 
 export const ImageSanitizer = createImageSanitizer();
+
