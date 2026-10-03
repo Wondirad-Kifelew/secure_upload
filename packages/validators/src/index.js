@@ -1,6 +1,10 @@
 export { MagicByteValidator } from "./magic-byte.js";
 export { FilenameSanitizerValidator } from "./filename-sanitizer.js";
 export { MimeMismatchValidator } from "./mime-mismatch.js";
-export { ZipBombGuardValidator, createZipBombGuardValidator } from "./zip-bomb-guard.js";
+export { ZipBombGuardValidator, createZipBombGuardValidator } from "./zip/before-unzip/zip-bomb-guard.js";
 export { PolyglotDetectorValidator, createPolyglotDetectorValidator } from "./polyglot-detector.js";
-export { ZipSlipGuardValidator } from "./zip-slip-guard.js";
+export { ZipSlipGuardValidator } from "./zip/before-unzip/zip-slip-guard.js";
+export { EntryCountGuardValidator } from "./zip/before-unzip/entry-count-guard.js";
+export { DuplicateEntryGuardValidator } from "./zip/before-unzip/duplicate-entry-guard.js";
+export { NestedArchiveGuardValidator } from "./zip/before-unzip/nested-archive-guard.js";
+export { SymlinkEntryGuardValidator } from "./zip/before-unzip/symlink-entry-guard.js";

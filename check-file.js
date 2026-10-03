@@ -18,6 +18,10 @@ import {
   ZipBombGuardValidator,
   PolyglotDetectorValidator,
   ZipSlipGuardValidator,
+  EntryCountGuardValidator,
+  DuplicateEntryGuardValidator,
+  NestedArchiveGuardValidator,
+  SymlinkEntryGuardValidator,
 } from "@secureupload/validators";
 import { ScanPipeline, createClamAVScanner, createYaraScanner } from "@secureupload/scanners";
 import { ImageSanitizer, PdfSanitizer } from "@secureupload/cdr";
@@ -43,6 +47,10 @@ const validationPipeline = new ValidationPipeline([
   ZipBombGuardValidator,
   PolyglotDetectorValidator,
   ZipSlipGuardValidator,
+  EntryCountGuardValidator,
+  DuplicateEntryGuardValidator,
+  NestedArchiveGuardValidator,
+  SymlinkEntryGuardValidator,
 ]);
 await validationPipeline.run(buffer, context);
 
