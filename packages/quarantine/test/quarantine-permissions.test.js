@@ -15,6 +15,8 @@ describe("Quarantine permissions", () => {
       const dirMode = (await fs.stat(objectDir)).mode & 0o777;
       const fileMode = (await fs.stat(record.samplePath)).mode & 0o777;
 
+      if (process.platform === "win32") return;
+
       expect(rootMode).toBe(0o700);
       expect(dirMode).toBe(0o700);
       expect(fileMode).toBe(0o600);

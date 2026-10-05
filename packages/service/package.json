@@ -1,0 +1,17 @@
+{
+  "name": "@secureupload/service",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "dependencies": {
+    "@secureupload/core": "*",
+    "@secureupload/quarantine": "*",
+    "@secureupload/sandbox": "*",
+    "@secureupload/risk-engine": "1.0.0",
+    "@secureupload/ai": "1.0.0"
+  }
+}

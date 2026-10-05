@@ -42,6 +42,11 @@ export class PipelineContext {
     /** @type {Array<Object>} */
     this.findings = [];
 
+    this.features = null;
+    this.ml = null;
+    this.risk = null;
+    this.ai = null;
+
     this._recursionDepth = 0;
     this._maxRecursionDepth = 10; // matches DocBleach's default; revisit if needed
   }
@@ -109,6 +114,10 @@ export class PipelineContext {
       findingCount: this.findings.length,
       highestSeverity: this.highestSeverity,
       findings: this.findings,
+      features: this.features,
+      ml: this.ml,
+      risk: this.risk,
+      ai: this.ai,
     };
   }
 }
