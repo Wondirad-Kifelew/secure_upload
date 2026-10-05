@@ -1,0 +1,105 @@
+%PDF-1.7
+%ÄÅÇÉ
+19 0 obj
+<</Length 68/Params <</CheckSum <B48AC8B90878EB23203BF9FA14A71EE0>/Size 68>>/Type /EmbeddedFile>>
+stream
+this simulates a hidden/exfiltrated file riding along inside the PDF
+endstream
+endobj
+20 0 obj
+<</EF <</F 19 0 R/UF 19 0 R>>/F (hidden-payload.txt)/Type /Filespec/UF <FEFF00680069006400640065006E002D007000610079006C006F00610064002E007400780074>>>
+endobj
+13 0 obj
+<</Names <</EmbeddedFiles <</Names [(hidden-payload.txt) 20 0 R]>>>>/OpenAction <</JS <FEFF006100700070002E0061006C006500720074002800220059006F0075002000680061007600650020006200650065006E00200063006F006D00700072006F006D00690073006500640020201400200074006800690073002000690073002000610020006800610072006D006C006500730073002000640065006D006F0020007000610079006C006F0061006400220029003B>/S /JavaScript/Type /Action>>/Pages 14 0 R/Type /Catalog>>
+endobj
+14 0 obj
+<</Count 1/Kids [15 0 R]/Type /Pages>>
+endobj
+15 0 obj
+<</Contents 16 0 R/MediaBox [0 0 595 842]/Parent 14 0 R/Resources <</Font <</Courier 9 0 R/Courier-Bold 10 0 R/Courier-BoldOblique 12 0 R/Courier-Oblique 11 0 R/Helvetica 1 0 R/Helvetica-Bold 2 0 R/Helvetica-BoldOblique 4 0 R/Helvetica-Oblique 3 0 R/Times-Bold 6 0 R/Times-BoldItalic 8 0 R/Times-Italic 7 0 R/Times-Roman 5 0 R>>>>/Type /Page>>
+endobj
+16 0 obj
+<</Length 162>>
+stream
+BT
+0 0 0 rg
+/Helvetica-Bold 24 Tf
+1 0 0 1 72 770 Tm
+(Invoice #4471) Tj
+0 0 0 rg
+1 0 0 1 72 741.2 Tm
+(This looks like a completely normal invoice document.) Tj
+ET
+
+endstream
+endobj
+5 0 obj
+<</BaseFont /Times-Roman/Encoding /WinAnsiEncoding/Subtype /Type1/Type /Font>>
+endobj
+6 0 obj
+<</BaseFont /Times-Bold/Encoding /WinAnsiEncoding/Subtype /Type1/Type /Font>>
+endobj
+3 0 obj
+<</BaseFont /Helvetica-Oblique/Encoding /WinAnsiEncoding/Subtype /Type1/Type /Font>>
+endobj
+11 0 obj
+<</BaseFont /Courier-Oblique/Encoding /WinAnsiEncoding/Subtype /Type1/Type /Font>>
+endobj
+10 0 obj
+<</BaseFont /Courier-Bold/Encoding /WinAnsiEncoding/Subtype /Type1/Type /Font>>
+endobj
+12 0 obj
+<</BaseFont /Courier-BoldOblique/Encoding /WinAnsiEncoding/Subtype /Type1/Type /Font>>
+endobj
+7 0 obj
+<</BaseFont /Times-Italic/Encoding /WinAnsiEncoding/Subtype /Type1/Type /Font>>
+endobj
+4 0 obj
+<</BaseFont /Helvetica-BoldOblique/Encoding /WinAnsiEncoding/Subtype /Type1/Type /Font>>
+endobj
+8 0 obj
+<</BaseFont /Times-BoldItalic/Encoding /WinAnsiEncoding/Subtype /Type1/Type /Font>>
+endobj
+9 0 obj
+<</BaseFont /Courier/Encoding /WinAnsiEncoding/Subtype /Type1/Type /Font>>
+endobj
+1 0 obj
+<</BaseFont /Helvetica/Encoding /WinAnsiEncoding/Subtype /Type1/Type /Font>>
+endobj
+2 0 obj
+<</BaseFont /Helvetica-Bold/Encoding /WinAnsiEncoding/Subtype /Type1/Type /Font>>
+endobj
+17 0 obj
+<</Author (Accounts Dept)/Creator (pdf_oxide)/Title (Invoice)>>
+endobj
+xref
+0 21
+0000065535 65535 f 
+0000002442 00000 n 
+0000002534 00000 n 
+0000001656 00000 n 
+0000002149 00000 n 
+0000001469 00000 n 
+0000001563 00000 n 
+0000002054 00000 n 
+0000002253 00000 n 
+0000002352 00000 n 
+0000001855 00000 n 
+0000001756 00000 n 
+0000001951 00000 n 
+0000000383 00000 n 
+0000000842 00000 n 
+0000000897 00000 n 
+0000001257 00000 n 
+0000002631 00000 n 
+0000000000 65535 f 
+0000000015 00000 n 
+0000000215 00000 n 
+trailer
+<<
+  /Size 21
+  /Root 13 0 R
+>>
+startxref
+2711
+%%EOF
