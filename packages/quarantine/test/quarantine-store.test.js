@@ -1,7 +1,8 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { QuarantineStore, evaluateQuarantine } from "../src/index.js";
+import { PipelineContext } from "@secureupload/core";
+import { QuarantinePipeline, QuarantineStore, evaluateQuarantine } from "../src/index.js";
 
 describe("Quarantine", () => {
   let root;
@@ -58,5 +59,29 @@ describe("Quarantine", () => {
     await expect(store.transition(record.id, "released")).rejects.toThrow(
       "Invalid quarantine transition"
     );
+  });
+
+  test("runs upload stages before storing the quarantined result", async () => {
+    const stage = {
+      async run(buffer, context) {
+        expect(buffer.toString()).toBe("sample");
+        context.addFinding({
+          rule: "test-finding",
+          severity: "high",
+          message: "test evidence",
+          stage: "validation",
+        });
+      },
+    };
+
+    const context = new PipelineContext({ filename: "sample.txt", declaredMimeType: "text/plain" });
+    const result = await new QuarantinePipeline({ stages: [stage], store }).run(
+      Buffer.from("sample"),
+      context
+    );
+
+    expect(result.decision.suspicious).toBe(true);
+    expect(result.record.status).toBe("quarantined");
+    expect(result.record.findings).toHaveLength(1);
   });
 });

@@ -3,8 +3,7 @@
  * `npm test` runs everything, but `npm run test:core` (etc.) can target
  * a single package while you're working on it.
  *
- * As new packages (scanners, cdr, quarantine, service) are added, add
- * a matching entry here.
+ * As new packages (service) are added, add a matching entry here.
  */
 export default {
   projects: [
@@ -31,6 +30,12 @@ export default {
       testEnvironment: "node",
       transform: {},
       testMatch: ["<rootDir>/packages/cdr/test/**/*.test.js"]
+    },
+    {
+      displayName: "quarantine",
+      testEnvironment: "node",
+      transform: {},
+      testMatch: ["<rootDir>/packages/quarantine/test/**/*.test.js"]
     }
   ]
 };

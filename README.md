@@ -18,7 +18,9 @@ packages/
   validators/    Phase 1 — file-type/content validators.
                  Currently just magic-byte.js. More get added here.
 
-  (scanners/, cdr/, quarantine/, service/ — not built yet)
+   scanners/      Phase 2 — malware scanning stages.
+   quarantine/    Phase 4 — zero-trust storage and release state.
+   (cdr/, service/ — not built yet)
 ```
 
 **Rule of thumb:** every other package depends only on `core`, never on
@@ -47,3 +49,11 @@ npm run test:validators
 
 Findings should never be thrown as errors. A "bad" file is a normal,
 expected outcome — record it as a finding on the context, don't throw.
+
+## Quarantine flow
+
+Use `QuarantinePipeline` as the final upload runner. It executes the supplied
+stages, evaluates all findings, and stores every upload under a generated
+quarantine ID with a private sample and manifest. A stored object starts in
+`quarantined` state and can then transition to `sandboxing`, `manual-review`,
+`released`, or `blocked` according to the quarantine policy.

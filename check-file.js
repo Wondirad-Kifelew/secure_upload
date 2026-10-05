@@ -1,6 +1,6 @@
 /**
- * Runs a file through the WHOLE pipeline at once: all 5 validators,
- * both real scanners (ClamAV, YARA) also a CDR
+ * Runs a file through the WHOLE pipeline at once: all 6 validators,
+ * both real scanners (ClamAV, YARA), a CDR, and finally quarantine.
  *
  * Usage:
  *   node check-file.js <path-to-file> <declared-mime-type>
@@ -21,6 +21,7 @@ import {
 } from "@secureupload/validators";
 import { ScanPipeline, createClamAVScanner, createYaraScanner } from "@secureupload/scanners";
 import { ImageSanitizer, PdfSanitizer } from "@secureupload/cdr";
+import { evaluateQuarantine, QuarantineStore } from "@secureupload/quarantine";
 
 const CLAMD_SOCKET_PATH = "/var/run/clamav/clamd.ctl";
 const YARA_RULES_PATH = "packages/scanners/test/fixtures/test-rules.yar";
@@ -35,7 +36,7 @@ if (!filePath || !declaredMimeType) {
 const buffer = fs.readFileSync(filePath);
 const context = new PipelineContext({ filename: filePath, declaredMimeType });
 
-// Stage 1: validation — same as check-uploads.js
+// Stage 1: validation — the full validator set
 const validationPipeline = new ValidationPipeline([
   MagicByteValidator,
   FilenameSanitizerValidator,
@@ -97,6 +98,31 @@ if (declaredMimeType === "application/pdf") {
   }
 }
 
+// Stage 5: quarantine — the file is stored in the quarantine store and
+// scored by policy against every finding collected above. This calls
+// evaluateQuarantine + QuarantineStore directly rather than going
+// through QuarantinePipeline, because that pipeline would re-run the
+// validation stage and duplicate every finding in the report and the
+// score.
+let quarantineInfo = null;
+try {
+  const decision = evaluateQuarantine(context.findings);
+  const record = await new QuarantineStore().put(
+    buffer,
+    {
+      filename: context.filename,
+      declaredMimeType: context.declaredMimeType,
+    },
+    decision
+  );
+  quarantineInfo = {
+    id: record.id,
+    suspicionScore: decision.suspicionScore,
+  };
+} catch (err) {
+  console.warn(`  [warning] quarantine could not run: ${err.message}`);
+}
+
 // One combined report — the whole point of merging these scripts
 console.log(`\n${filePath}  (claiming to be: ${declaredMimeType})`);
 if (context.hasFindings) {
@@ -109,4 +135,9 @@ if (context.hasFindings) {
 
 if (sanitizedInfo) {
   console.log(`\n  sanitized copy written to: ${sanitizedInfo}`);
+}
+
+if (quarantineInfo) {
+  console.log(`  quarantined as: ${quarantineInfo.id}`);
+  console.log(`  suspicion score: ${quarantineInfo.suspicionScore}`);
 }
