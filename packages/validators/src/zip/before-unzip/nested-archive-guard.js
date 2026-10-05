@@ -64,12 +64,12 @@ export const NestedArchiveGuardValidator = {
 
 function readZipEntryNames(buffer) {
   return new Promise((resolve, reject) => {
-    yauzl.fromBuffer(buffer, { lazyEntries: true }, (err, zipfile) => {
+    yauzl.fromBuffer(buffer, { lazyEntries: true, decodeStrings: false }, (err, zipfile) => {
       if (err) return reject(err);
 
       const names = [];
       zipfile.on("entry", (entry) => {
-        names.push(entry.fileName);
+        names.push(entry.fileName.toString("utf8"));
         zipfile.readEntry();
       });
       zipfile.on("end", () => resolve(names));

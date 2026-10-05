@@ -1,5 +1,5 @@
 import yazl from "yazl";
-import { createZipBombGuardValidator, ZipBombGuardValidator } from "../src/zip-bomb-guard.js";
+import { createZipBombGuardValidator, ZipBombGuardValidator } from "../src/zip/before-unzip/zip-bomb-guard.js";
 
 /** Builds a real zip file in memory from { name: contentBuffer } entries. */
 function buildZip(files) {

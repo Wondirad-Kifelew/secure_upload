@@ -53,7 +53,7 @@ export const EntryCountGuardValidator = {
 /** Reads only the entry count via yauzl — never decompresses content. */
 function countZipEntries(buffer) {
   return new Promise((resolve, reject) => {
-    yauzl.fromBuffer(buffer, { lazyEntries: true }, (err, zipfile) => {
+      yauzl.fromBuffer(buffer, { lazyEntries: true, decodeStrings: false }, (err, zipfile) => {
       if (err) return reject(err);
  
       let count = 0;
