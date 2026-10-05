@@ -97,6 +97,20 @@ export class QuarantineStore {
     };
   }
 
+  async annotate(id, details = {}) {
+    const current = await this.get(id);
+    const updated = {
+      ...current,
+      ...details,
+      updatedAt: new Date().toISOString(),
+    };
+
+    const { samplePath: _samplePath, manifestPath: _manifestPath, ...persisted } = updated;
+    await fs.writeFile(current.manifestPath, JSON.stringify(persisted, null, 2), { mode: 0o600 });
+    await fs.chmod(current.manifestPath, 0o600);
+    return updated;
+  }
+
   async transition(id, nextStatus, details = {}) {
     const current = await this.get(id);
     const allowed = ALLOWED_TRANSITIONS[current.status] ?? new Set();

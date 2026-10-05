@@ -2,3 +2,11 @@ node_modules/
 coverage/
 *.log
 .DS_Store
+
+# Local secrets and generated security-analysis data
+.env
+.env.*
+storage/quarantine/
+storage/models/
+data/*.json
+!data/benign-vectors.example.json

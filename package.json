@@ -8,7 +8,16 @@
   "scripts": {
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
     "test:core": "node --experimental-vm-modules node_modules/jest/bin/jest.js --selectProjects core",
-    "test:validators": "node --experimental-vm-modules node_modules/jest/bin/jest.js --selectProjects validators"
+    "test:validators": "node --experimental-vm-modules node_modules/jest/bin/jest.js --selectProjects validators",
+    "test:scanners": "node --experimental-vm-modules node_modules/jest/bin/jest.js --selectProjects scanners",
+    "test:cdr": "node --experimental-vm-modules node_modules/jest/bin/jest.js --selectProjects cdr",
+    "test:quarantine": "node --experimental-vm-modules node_modules/jest/bin/jest.js --selectProjects quarantine",
+    "test:sandbox": "node --experimental-vm-modules node_modules/jest/bin/jest.js --selectProjects sandbox",
+    "test:risk": "node --experimental-vm-modules node_modules/jest/bin/jest.js --selectProjects risk-engine",
+    "test:ai": "node --experimental-vm-modules node_modules/jest/bin/jest.js --selectProjects ai",
+    "test:service": "node --experimental-vm-modules node_modules/jest/bin/jest.js --selectProjects service",
+    "train:anomaly": "node scripts/train-anomaly-model.js",
+    "demo:ml-ai": "node scripts/demo-ml-ai.js"
   },
   "devDependencies": {
     "jest": "^29.7.0",
