@@ -1,0 +1,44 @@
+# Spins up clamd and the service together for local dev, per the project's
+# documented structure. `clamav/clamav` runs clamd and keeps its virus
+# definitions updated; the service reaches it over the Compose network by
+# container name, never a filesystem socket (clamd and the service are
+# separate containers, possibly separate hosts in a real deployment).
+services:
+  clamav:
+    image: clamav/clamav:stable
+    restart: unless-stopped
+    ports:
+      - "3310:3310"
+    volumes:
+      - clamav-data:/var/lib/clamav
+    # clamd can take a couple of minutes on first boot while it downloads
+    # virus definitions — the healthcheck is what `service` actually waits on.
+    healthcheck:
+      test: ["CMD", "clamdcheck.sh"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 180s
+
+  service:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      PORT: "3000"
+      CLAMD_HOST: clamav
+      CLAMD_PORT: "3310"
+      QUARANTINE_ROOT: /app/quarantine-data
+      # YARA_RULES_PATH: set this to a mounted rules file to enable YARA scanning.
+      # OPENAI_API_KEY: set this to enable real AI explanations (omit for the
+      #   deterministic "local" explanation fallback — see packages/ai).
+    volumes:
+      - quarantine-data:/app/quarantine-data
+    depends_on:
+      clamav:
+        condition: service_healthy
+
+volumes:
+  clamav-data:
+  quarantine-data:

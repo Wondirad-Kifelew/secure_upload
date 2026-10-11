@@ -10,7 +10,7 @@
   "dependencies": {
     "@secureupload/core": "*",
     "acorn": "^8.11.3",
-    "file-type": "^19.0.0",
+    "file-type": "^22.1.1",
     "yauzl": "^3.4.0"
   },
   "devDependencies": {

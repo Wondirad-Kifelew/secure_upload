@@ -49,13 +49,11 @@ describe("UploadSecurityService", () => {
         sandboxManager,
       });
 
-      const png = Buffer.concat([
-        Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
-        Buffer.from([0, 0, 0, 13]),
-        Buffer.from("IHDR"),
-        Buffer.alloc(13),
-        Buffer.alloc(4),
-        Buffer.alloc(20)
+     const png = Buffer.from([
+        137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1, 0, 0, 0, 1, 8,
+        2, 0, 0, 0, 144, 119, 83, 222, 0, 0, 0, 9, 112, 72, 89, 115, 0, 0, 3, 232, 0, 0, 3, 232, 1,
+        181, 123, 82, 107, 0, 0, 0, 12, 73, 68, 65, 84, 8, 153, 99, 248, 207, 192, 0, 0, 3, 1, 1,
+        0, 156, 227, 191, 89, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130,
       ]);
       const result = await service.analyze({
         buffer: png,
