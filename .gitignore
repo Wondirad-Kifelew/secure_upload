@@ -10,3 +10,4 @@ storage/quarantine/
 storage/models/
 data/*.json
 !data/benign-vectors.example.json
+attack-suite/.test-quarantine/
