@@ -1,0 +1,12 @@
+node_modules
+**/node_modules
+coverage
+*.log
+.git
+.DS_Store
+storage/quarantine
+storage/models
+data/*.json
+!data/benign-vectors.example.json
+uploads
+quarantine-data

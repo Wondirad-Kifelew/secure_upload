@@ -61,6 +61,12 @@ export default {
       testEnvironment: "node",
       transform: {},
       testMatch: ["<rootDir>/packages/service/test/**/*.test.js"]
+    },
+    {
+      displayName: "attack-suite",
+      testEnvironment: "node",
+      transform: {},
+      testMatch: ["<rootDir>/attack-suite/**/*.test.js"]
     }
   ]
 };

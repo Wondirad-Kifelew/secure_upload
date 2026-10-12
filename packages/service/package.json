@@ -12,6 +12,8 @@
     "@secureupload/quarantine": "*",
     "@secureupload/sandbox": "*",
     "@secureupload/risk-engine": "1.0.0",
-    "@secureupload/ai": "1.0.0"
+    "@secureupload/ai": "1.0.0",
+    "@secureupload/scanners": "*",
+    "@secureupload/cdr": "*"
   }
 }

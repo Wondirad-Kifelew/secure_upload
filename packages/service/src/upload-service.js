@@ -3,13 +3,33 @@ import { evaluateQuarantine, QuarantineStore } from "@secureupload/quarantine";
 import { SandboxManager, shouldSandbox } from "@secureupload/sandbox";
 import { calculateRisk, createAnomalyDetectorFromEnv, createBootstrapAnomalyDetector, extractFeatures } from "@secureupload/risk-engine";
 import { createAIProviderFromEnv } from "@secureupload/ai";
+import { ScanPipeline } from "@secureupload/scanners";
+import { ImageSanitizer, PdfSanitizer } from "@secureupload/cdr";
+
+/**
+ * Which CDR sanitizer applies to a given declared MIME type. There is no
+ * entry for OOXML (docx/xlsx/pptx) yet — that sanitizer doesn't exist,
+ * so those files simply skip CDR and pass through as-is. Order matters:
+ * first match wins.
+ */
+const DEFAULT_SANITIZER_RULES = [
+  { test: (mime) => typeof mime === "string" && mime.startsWith("image/"), sanitizer: ImageSanitizer },
+  { test: (mime) => mime === "application/pdf", sanitizer: PdfSanitizer },
+];
 
 /**
  * Application-facing security workflow.
  *
  * Security stages:
- * validation -> quarantine -> feature extraction -> ML anomaly ->
- * deterministic risk -> AI explanation -> conditional sandbox.
+ * validation -> scanning -> CDR sanitization -> quarantine ->
+ * feature extraction -> ML anomaly -> deterministic risk ->
+ * AI explanation -> conditional sandbox.
+ *
+ * Quarantine, risk scoring, the sandbox and AI explanation all operate on
+ * the SANITIZED buffer, not the original upload — once CDR has rebuilt a
+ * clean version, that's the artifact the rest of the pipeline treats as
+ * canonical. The original bytes are not separately retained today (known
+ * simplification, not an oversight).
  *
  * ML and AI are advisory evidence layers. They do not replace validation or
  * the deterministic policy, and AI is never allowed to override the policy.
@@ -17,6 +37,8 @@ import { createAIProviderFromEnv } from "@secureupload/ai";
 export class UploadSecurityService {
   constructor({
     validators = [],
+    scanners = [],
+    sanitizerRules = DEFAULT_SANITIZER_RULES,
     quarantineStore = new QuarantineStore(),
     sandboxManager,
     anomalyDetector = createAnomalyDetectorFromEnv() ?? createBootstrapAnomalyDetector(),
@@ -27,10 +49,17 @@ export class UploadSecurityService {
     }
 
     this.validationPipeline = new ValidationPipeline(validators);
+    this.scanPipeline = new ScanPipeline(scanners);
+    this.sanitizerRules = sanitizerRules;
     this.quarantineStore = quarantineStore;
     this.sandboxManager = sandboxManager;
     this.anomalyDetector = anomalyDetector;
     this.aiProvider = aiProvider;
+  }
+
+  /** Returns the first matching CDR sanitizer for a declared MIME type, or null. */
+  resolveSanitizer(declaredMimeType) {
+    return this.sanitizerRules.find((rule) => rule.test(declaredMimeType))?.sanitizer ?? null;
   }
 
   async analyze({ buffer, filename, declaredMimeType, riskScore = null } = {}) {
@@ -40,18 +69,45 @@ export class UploadSecurityService {
 
     const context = new PipelineContext({ filename, declaredMimeType });
     await this.validationPipeline.run(buffer, context);
+    await this.scanPipeline.run(buffer, context);
+
+    // CDR: rebuild a clean version of the file before anything downstream
+    // treats it as trusted. Unconditional for types with a sanitizer; types
+    // without one (OOXML, for now) pass through unchanged. A sanitizer that
+    // can't even parse the file isn't a crash — it's evidence the declared
+    // type is a lie, so it becomes a finding and the original buffer carries
+    // on rather than aborting the whole analysis.
+    let sanitizedBuffer = buffer;
+    const sanitizer = this.resolveSanitizer(declaredMimeType);
+    if (sanitizer) {
+      try {
+        const result = await sanitizer.sanitize(buffer, { filename, declaredMimeType });
+        sanitizedBuffer = result.buffer;
+        for (const finding of result.findings ?? []) {
+          context.addFinding({ ...finding, stage: "cdr", source: sanitizer.name });
+        }
+      } catch (error) {
+        context.addFinding({
+          rule: "cdr-sanitization-failed",
+          severity: "high",
+          message: `${sanitizer.name} could not sanitize this file: ${error.message}. The declared type (${declaredMimeType}) may be spoofed. Proceeding with the original, unsanitized buffer.`,
+          stage: "cdr",
+          source: sanitizer.name,
+        });
+      }
+    }
 
     // Every upload enters quarantine before deeper analysis or release.
     const quarantineDecision = evaluateQuarantine(context.findings);
     const quarantine = await this.quarantineStore.put(
-      buffer,
+      sanitizedBuffer,
       { filename, declaredMimeType },
       quarantineDecision
     );
 
     // Turn heterogeneous validator observations into a stable numeric vector.
     const features = extractFeatures({
-      buffer,
+      buffer: sanitizedBuffer,
       findings: context.findings,
       filename,
     });
@@ -125,7 +181,7 @@ export class UploadSecurityService {
         ai = await this.aiProvider.explain({
           filename,
           declaredMimeType,
-          sizeBytes: buffer.length,
+          sizeBytes: sanitizedBuffer.length,
           sha256: quarantine.sha256,
           features,
           findings: context.findings,

@@ -20,7 +20,12 @@
     "demo:ml-ai": "node scripts/demo-ml-ai.js"
   },
   "devDependencies": {
-    "jest": "^29.7.0",
+    "jest": "^30.5.2",
     "sharp": "^0.35.4"
+  },
+  "overrides": {
+    "@istanbuljs/load-nyc-config": {
+      "js-yaml": "^4.1.0"
+    }
   }
 }
