@@ -111,13 +111,13 @@ export const ZipBombGuardValidator = createZipBombGuardValidator();
  */
 function readZipEntryMetadata(buffer) {
   return new Promise((resolve, reject) => {
-    yauzl.fromBuffer(buffer, { lazyEntries: true }, (err, zipfile) => {
+       yauzl.fromBuffer(buffer, { lazyEntries: true, decodeStrings: false, validateEntrySizes: false }, (err, zipfile) => {
       if (err) return reject(err);
 
       const entries = [];
       zipfile.on("entry", (entry) => {
-        entries.push({
-          fileName: entry.fileName,
+                entries.push({
+          fileName: entry.fileName.toString("utf8"),
           compressedSize: entry.compressedSize,
           uncompressedSize: entry.uncompressedSize,
         });

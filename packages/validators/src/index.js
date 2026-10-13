@@ -8,3 +8,4 @@ export { EntryCountGuardValidator } from "./zip/before-unzip/entry-count-guard.j
 export { DuplicateEntryGuardValidator } from "./zip/before-unzip/duplicate-entry-guard.js";
 export { NestedArchiveGuardValidator } from "./zip/before-unzip/nested-archive-guard.js";
 export { SymlinkEntryGuardValidator } from "./zip/before-unzip/symlink-entry-guard.js";
+export { EncryptedEntryGuardValidator } from "./zip/before-unzip/encrypted-entry-guard.js";

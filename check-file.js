@@ -22,6 +22,7 @@ import {
   DuplicateEntryGuardValidator,
   NestedArchiveGuardValidator,
   SymlinkEntryGuardValidator,
+  EncryptedEntryGuardValidator,
 } from "@secureupload/validators";
 import { ScanPipeline, createClamAVScanner, createYaraScanner } from "@secureupload/scanners";
 import { ImageSanitizer, PdfSanitizer } from "@secureupload/cdr";
@@ -52,6 +53,7 @@ const validationPipeline = new ValidationPipeline([
   DuplicateEntryGuardValidator,
   NestedArchiveGuardValidator,
   SymlinkEntryGuardValidator,
+  EncryptedEntryGuardValidator,
 ]);
 await validationPipeline.run(buffer, context);
 
