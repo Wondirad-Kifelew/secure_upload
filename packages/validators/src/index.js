@@ -9,3 +9,4 @@ export { DuplicateEntryGuardValidator } from "./zip/before-unzip/duplicate-entry
 export { NestedArchiveGuardValidator } from "./zip/before-unzip/nested-archive-guard.js";
 export { SymlinkEntryGuardValidator } from "./zip/before-unzip/symlink-entry-guard.js";
 export { EncryptedEntryGuardValidator } from "./zip/before-unzip/encrypted-entry-guard.js";
+export { NestedZipInspectorValidator, createNestedZipInspectorValidator } from "./zip/after-unzip/nested-zip-inspector.js";
