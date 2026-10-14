@@ -4,7 +4,8 @@ import { SandboxManager, shouldSandbox } from "@secureupload/sandbox";
 import { calculateRisk, createAnomalyDetectorFromEnv, createBootstrapAnomalyDetector, extractFeatures } from "@secureupload/risk-engine";
 import { createAIProviderFromEnv } from "@secureupload/ai";
 import { ScanPipeline } from "@secureupload/scanners";
-import { ImageSanitizer, PdfSanitizer } from "@secureupload/cdr";
+import { ImageSanitizer, PdfSanitizer, OoxmlSanitizer } from "@secureupload/cdr";
+
 
 /**
  * Which CDR sanitizer applies to a given declared MIME type. There is no
@@ -12,9 +13,19 @@ import { ImageSanitizer, PdfSanitizer } from "@secureupload/cdr";
  * so those files simply skip CDR and pass through as-is. Order matters:
  * first match wins.
  */
+const OOXML_MIME_TYPES = new Set([
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  "application/vnd.ms-word.document.macroEnabled.12",
+  "application/vnd.ms-excel.sheet.macroEnabled.12",
+  "application/vnd.ms-powerpoint.presentation.macroEnabled.12",
+]);
+
 const DEFAULT_SANITIZER_RULES = [
   { test: (mime) => typeof mime === "string" && mime.startsWith("image/"), sanitizer: ImageSanitizer },
   { test: (mime) => mime === "application/pdf", sanitizer: PdfSanitizer },
+  { test: (mime) => OOXML_MIME_TYPES.has(mime), sanitizer: OoxmlSanitizer },
 ];
 
 /**
