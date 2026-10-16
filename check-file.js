@@ -23,6 +23,11 @@ import {
   NestedArchiveGuardValidator,
   SymlinkEntryGuardValidator,
   EncryptedEntryGuardValidator,
+  NonRecursiveBombGuardValidator,
+  DeviceNameGuardValidator,
+  UnicodeControlGuardValidator,
+  TrailingCharacterGuardValidator,
+  DangerousExtensionGuardValidator,
   NestedZipInspectorValidator
 } from "@secureupload/validators";
 import { ScanPipeline, createClamAVScanner, createYaraScanner } from "@secureupload/scanners";
@@ -55,6 +60,11 @@ const validationPipeline = new ValidationPipeline([
   NestedArchiveGuardValidator,
   SymlinkEntryGuardValidator,
   EncryptedEntryGuardValidator,
+  NonRecursiveBombGuardValidator,
+  DeviceNameGuardValidator,
+  UnicodeControlGuardValidator,
+  TrailingCharacterGuardValidator,
+  DangerousExtensionGuardValidator,
 ]);
 await validationPipeline.run(buffer, context);
 

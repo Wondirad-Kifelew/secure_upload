@@ -9,6 +9,11 @@ import { DuplicateEntryGuardValidator } from "../before-unzip/duplicate-entry-gu
 import { NestedArchiveGuardValidator } from "../before-unzip/nested-archive-guard.js";
 import { SymlinkEntryGuardValidator } from "../before-unzip/symlink-entry-guard.js";
 import { EncryptedEntryGuardValidator } from "../before-unzip/encrypted-entry-guard.js";
+import { NonRecursiveBombGuardValidator } from "../before-unzip/non-recursive-bomb-guard.js";
+import { DeviceNameGuardValidator } from "../before-unzip/device-name-guard.js";
+import { UnicodeControlGuardValidator } from "../before-unzip/unicode-control-guard.js";
+import { TrailingCharacterGuardValidator } from "../before-unzip/trailing-character-guard.js";
+import { DangerousExtensionGuardValidator } from "./dangerous-extension-guard.js";
 /**
  * NestedZipInspectorValidator
  * ----------------------------
@@ -63,6 +68,11 @@ const DEFAULT_GUARDS = [
   NestedArchiveGuardValidator,
   SymlinkEntryGuardValidator,
   EncryptedEntryGuardValidator,
+  NonRecursiveBombGuardValidator,
+  DeviceNameGuardValidator,
+  UnicodeControlGuardValidator,
+  TrailingCharacterGuardValidator,
+  DangerousExtensionGuardValidator,
 ];
 
 class DepthExceededError extends Error {}
