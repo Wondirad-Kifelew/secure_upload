@@ -57,6 +57,7 @@ function streamToClamd(buffer, { socketPath, host, port }) {
     const connectionOptions = socketPath ? { path: socketPath } : { host, port };
     const socket = net.createConnection(connectionOptions);
     let response = "";
+    socket.setTimeout(30000, () => socket.destroy(new Error("clamd timed out after 30s")));
 
     socket.on("connect", () => {
       socket.write("zINSTREAM\0");

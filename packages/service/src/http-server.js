@@ -1,4 +1,7 @@
+import crypto from "node:crypto";
+import fs from "node:fs/promises";
 import http from "node:http";
+import { fileTypeFromBuffer } from "file-type";
 import { UploadSecurityService } from "./upload-service.js";
 import { QuarantineStore } from "@secureupload/quarantine";
 import { SandboxManager, DryRunSandboxAdapter } from "@secureupload/sandbox";
@@ -26,28 +29,56 @@ import { createClamAVScanner, createYaraScanner, FakeScanner } from "@secureuplo
 /**
  * http-server.js
  * ---------------
- * Thin HTTP wrapper around UploadSecurityService. This file does no
- * security logic of its own — it only handles the wire format (reading
- * the request body into a Buffer, pulling filename/mime-type out of
- * headers, writing the JSON response) and delegates everything else to
- * the service layer, which is fully testable without any of this.
+ * Thin HTTP wrapper around UploadSecurityService (wire format only).
  *
- * POST /scan
- *   Headers: X-Filename, Content-Type (the file's declared mime type)
- *   Body:    raw file bytes
- *   Returns: 200 { quarantine, risk, ml, ai, sandbox, findings }
+ * POST /clean   Body: raw file bytes. Headers: Authorization, X-Filename,
+ *               Content-Type (optional - detected from the bytes if missing).
+ *               200 + cleaned file bytes  when the verdict is "allow"
+ *               422 + { verdict, findings } otherwise
+ * POST /scan    Same request; always returns JSON (verdict, findings, risk...)
+ * GET /files/:id  Download the cleaned file of an approved scan
+ * GET /health   { status: "ok" } (no auth)
  *
- * GET /health
- *   Returns: 200 { status: "ok" }
- *
- * No multipart/form-data parsing — deliberately. This repo has never
- * added an HTTP framework or body-parser dependency, and adding one
- * just for this route would make the service package heavier than the
- * rest of the project's "thin wrapper" design calls for. A raw-body
- * POST is enough for a single-file upload endpoint.
+ * No multipart parsing on purpose: a raw-body POST is enough for one file.
  */
 
-const MAX_UPLOAD_BYTES = 50 * 1024 * 1024; // 50 MB — rejects oversized bodies before buffering them fully
+const MAX_UPLOAD_BYTES = Number(process.env.MAX_UPLOAD_MB || 10) * 1024 * 1024; // rejects oversized bodies before buffering them fully
+const MAX_CONCURRENT_SCANS = Number(process.env.MAX_CONCURRENT_SCANS || 4);
+let activeScans = 0;
+
+/**
+ * allow  -> safe to use (the cleaned file can be downloaded)
+ * review -> a person should look at it first
+ * block  -> reject
+ * Findings from a CDR step that SUCCEEDED describe what was removed from the
+ * file, so the cleaned output is fine; only a failed sanitization counts.
+ */
+function decideVerdict(findings) {
+  const relevant = findings.filter((f) => f.stage !== "cdr" || f.rule === "cdr-sanitization-failed");
+  const severities = new Set(relevant.map((f) => f.severity));
+  if (severities.has("extreme") || severities.has("high")) return "block";
+  if (severities.has("medium")) return "review";
+  return "allow";
+}
+
+// Types that tell us nothing about the real file (curl and many HTTP clients
+// send these by default). For them we detect the type from the bytes instead.
+const GENERIC_TYPES = new Set(["application/octet-stream", "application/x-www-form-urlencoded", "binary/octet-stream"]);
+
+async function resolveDeclaredType(header, buffer) {
+  const declared = header ? header.split(";")[0].trim().toLowerCase() : "";
+  if (declared && !GENERIC_TYPES.has(declared)) return declared;
+  const detected = await fileTypeFromBuffer(buffer);
+  return detected?.mime ?? null;
+}
+
+function isAuthorized(req) {
+  const apiKey = process.env.API_KEY;
+  if (!apiKey) return true; // only reachable in DEV_MODE (startup refuses otherwise)
+  const given = Buffer.from(String(req.headers.authorization ?? ""));
+  const expected = Buffer.from(`Bearer ${apiKey}`);
+  return given.length === expected.length && crypto.timingSafeEqual(given, expected);
+}
 
 function readBody(req) {
   return new Promise((resolve, reject) => {
@@ -147,61 +178,134 @@ function createFakeScannerFallback() {
 }
 
 export function createServer(service = createDefaultService()) {
-  return http.createServer(async (req, res) => {
+  const server = http.createServer(async (req, res) => {
     try {
       if (req.method === "GET" && req.url === "/health") {
         return sendJson(res, 200, { status: "ok" });
       }
 
-      if (req.method !== "POST" || req.url !== "/scan") {
-        return sendJson(res, 404, { error: "Not found. POST a file to /scan." });
+      if (!isAuthorized(req)) {
+        return sendJson(res, 401, { error: "Missing or invalid API key." });
+      }
+
+      // GET /files/:id — download the cleaned file, only if it was approved.
+      const fileMatch = req.method === "GET" && req.url.match(/^\/files\/([0-9a-fA-F-]{36})$/);
+      if (fileMatch) {
+        let record;
+        try {
+          record = await service.quarantineStore.get(fileMatch[1]);
+        } catch {
+          return sendJson(res, 404, { error: "File not found." });
+        }
+        if (record.verdict !== "allow") {
+          return sendJson(res, 403, { error: "File was not approved, so it cannot be downloaded." });
+        }
+        const bytes = await fs.readFile(record.samplePath);
+        res.writeHead(200, {
+          "Content-Type": "application/octet-stream",
+          "Content-Length": bytes.length,
+          "Content-Disposition": `attachment; filename="cleaned-${record.id}"`,
+          "X-Content-Type-Options": "nosniff",
+        });
+        return res.end(bytes);
+      }
+
+      if (req.method !== "POST" || (req.url !== "/scan" && req.url !== "/clean")) {
+        return sendJson(res, 404, { error: "Not found. POST a file to /scan or /clean." });
       }
 
       const filename = req.headers["x-filename"];
-      const declaredMimeType = req.headers["content-type"] || null;
+      const typeHeader = req.headers["content-type"] || null;
 
       if (!filename) {
         return sendJson(res, 400, { error: "Missing required X-Filename header." });
       }
 
-      let buffer;
+      if (activeScans >= MAX_CONCURRENT_SCANS) {
+        return sendJson(res, 503, { error: "Server busy, retry shortly." });
+      }
+      activeScans += 1;
       try {
-        buffer = await readBody(req);
-      } catch (error) {
-        return sendJson(res, error.statusCode || 400, { error: error.message });
+        let buffer;
+        try {
+          buffer = await readBody(req);
+        } catch (error) {
+          return sendJson(res, error.statusCode || 400, { error: error.message });
+        }
+
+        if (buffer.length === 0) {
+          return sendJson(res, 400, { error: "Empty request body — no file content received." });
+        }
+
+        const declaredMimeType = await resolveDeclaredType(typeHeader, buffer);
+        const result = await service.analyze({ buffer, filename, declaredMimeType });
+        const findings = result.context.findings;
+        const verdict = decideVerdict(findings);
+        await service.quarantineStore.annotate(result.quarantine.id, { verdict });
+
+        // POST /clean: one request in, the cleaned file out.
+        if (req.url === "/clean") {
+          if (verdict !== "allow") {
+            return sendJson(res, 422, { verdict, findings });
+          }
+          const bytes = await fs.readFile(result.quarantine.samplePath);
+          res.writeHead(200, {
+            "Content-Type": "application/octet-stream",
+            "Content-Length": bytes.length,
+            "X-Verdict": verdict,
+            "X-Quarantine-Id": result.quarantine.id,
+            "X-Content-Type-Options": "nosniff",
+          });
+          return res.end(bytes);
+        }
+
+        return sendJson(res, 200, {
+          verdict,
+          cleaned:
+            Boolean(service.resolveSanitizer(declaredMimeType)) &&
+            !findings.some((f) => f.rule === "cdr-sanitization-failed"),
+          downloadUrl: verdict === "allow" ? `/files/${result.quarantine.id}` : null,
+          scanners: service.scanPipeline.scanners.map((s) => s.name),
+          quarantine: {
+            id: result.quarantine.id,
+            status: result.quarantine.status,
+            sha256: result.quarantine.sha256,
+          },
+          findings,
+          risk: result.risk,
+          ml: { status: result.ml.status, anomalyScore: result.ml.anomalyScore, isAnomalous: result.ml.isAnomalous },
+          sandbox: { triggered: result.sandbox.triggered, status: result.sandbox.status },
+          ai: result.ai ? { provider: result.ai.provider, explanation: result.ai.explanation } : null,
+        });
+      } finally {
+        activeScans -= 1;
       }
-
-      if (buffer.length === 0) {
-        return sendJson(res, 400, { error: "Empty request body — no file content received." });
-      }
-
-      const result = await service.analyze({ buffer, filename, declaredMimeType });
-
-      return sendJson(res, 200, {
-        quarantine: {
-          id: result.quarantine.id,
-          status: result.quarantine.status,
-          sha256: result.quarantine.sha256,
-        },
-        findings: result.context.findings,
-        risk: result.risk,
-        ml: { status: result.ml.status, anomalyScore: result.ml.anomalyScore, isAnomalous: result.ml.isAnomalous },
-        sandbox: { triggered: result.sandbox.triggered, status: result.sandbox.status },
-        ai: result.ai ? { provider: result.ai.provider, explanation: result.ai.explanation } : null,
-      });
     } catch (error) {
-      console.error("[http-server] Unhandled error while processing /scan:", error);
+      console.error("[http-server] Unhandled error while processing request:", error);
       return sendJson(res, 500, { error: "Internal error while analyzing the upload." });
     }
   });
+  server.requestTimeout = 60_000;
+  return server;
 }
 
 // Only start listening when this file is run directly (`node http-server.js`),
 // not when it's imported by a test.
 if (import.meta.url === `file://${process.argv[1]}`) {
+  const devMode = process.env.DEV_MODE === "true";
+  const hasClamd = Boolean(
+    (process.env.CLAMD_HOST && process.env.CLAMD_PORT) || process.env.CLAMD_SOCKET_PATH
+  );
+  if (!devMode && (!process.env.API_KEY || !hasClamd)) {
+    console.error(
+      "[http-server] Refusing to start. Production mode needs API_KEY and a clamd connection " +
+        "(CLAMD_HOST + CLAMD_PORT, or CLAMD_SOCKET_PATH). For local demos only, set DEV_MODE=true."
+    );
+    process.exit(1);
+  }
   const port = Number(process.env.PORT || 3000);
   const server = createServer();
   server.listen(port, () => {
-    console.log(`[http-server] SecureUpload service listening on port ${port}`);
+    console.log(`[http-server] SecureUpload service listening on port ${port}${devMode ? " (DEV_MODE)" : ""}`);
   });
 }
