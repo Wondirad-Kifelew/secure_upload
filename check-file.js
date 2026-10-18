@@ -45,7 +45,7 @@ if (!filePath || !declaredMimeType) {
 }
 
 const buffer = fs.readFileSync(filePath);
-const context = new PipelineContext({ filename: filePath, declaredMimeType });
+const context = new PipelineContext({ filename: path.basename(filePath), declaredMimeType });
 
 // Stage 1: validation — the full validator set
 const validationPipeline = new ValidationPipeline([
