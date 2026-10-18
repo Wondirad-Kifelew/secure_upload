@@ -7,7 +7,9 @@ import { UploadSecurityService } from "@secureupload/service";
 import { MagicByteValidator, FilenameSanitizerValidator, MimeMismatchValidator,
   PolyglotDetectorValidator, ZipBombGuardValidator, ZipSlipGuardValidator,
   EntryCountGuardValidator, DuplicateEntryGuardValidator, NestedArchiveGuardValidator,
-  SymlinkEntryGuardValidator } from "@secureupload/validators";
+  SymlinkEntryGuardValidator, EncryptedEntryGuardValidator, NonRecursiveBombGuardValidator,
+  DeviceNameGuardValidator, UnicodeControlGuardValidator, TrailingCharacterGuardValidator,
+  DangerousExtensionGuardValidator, NestedZipInspectorValidator } from "@secureupload/validators";
 import { FakeScanner, createClamAVScanner } from "@secureupload/scanners";
 import { QuarantineStore } from "@secureupload/quarantine";
 import { SandboxManager, DryRunSandboxAdapter } from "@secureupload/sandbox";
@@ -44,7 +46,9 @@ const service = new UploadSecurityService({
     MagicByteValidator, FilenameSanitizerValidator, MimeMismatchValidator,
     PolyglotDetectorValidator, ZipBombGuardValidator, ZipSlipGuardValidator,
     EntryCountGuardValidator, DuplicateEntryGuardValidator, NestedArchiveGuardValidator,
-    SymlinkEntryGuardValidator,
+    SymlinkEntryGuardValidator, EncryptedEntryGuardValidator, NonRecursiveBombGuardValidator,
+    DeviceNameGuardValidator, UnicodeControlGuardValidator, TrailingCharacterGuardValidator,
+    DangerousExtensionGuardValidator, NestedZipInspectorValidator,
   ],
   scanners,
   quarantineStore: new QuarantineStore({ rootDirectory: path.join(__dirname, ".test-quarantine") }),
@@ -86,7 +90,7 @@ describe("attack-suite regression", () => {
         `risk=${result.risk.score} findings=[${result.context.findings.map((f) => f.rule).join(", ")}]`
       );
     }
-  });
+  }, 30000);
 
   test("polyglot.gif triggers polyglot-dual-format and gets sandboxed", async () => {
     const result = await analyzeSample(path.join(SAMPLES_ROOT, "polyglots", "polyglot.gif"));

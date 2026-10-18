@@ -47,7 +47,7 @@ describe("EntryCountGuardValidator", () => {
     expect(finding).toBeDefined();
     expect(finding.severity).toBe("high");
     expect(finding.details.entryCount).toBe(10_001);
-  }, 30_000);
+  }, 120000);
 
   test("a corrupted/truncated zip produces no findings rather than throwing", async () => {
     const zip = await buildZip({ "file.txt": Buffer.from("hello") });

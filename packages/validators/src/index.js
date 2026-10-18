@@ -8,3 +8,10 @@ export { EntryCountGuardValidator } from "./zip/before-unzip/entry-count-guard.j
 export { DuplicateEntryGuardValidator } from "./zip/before-unzip/duplicate-entry-guard.js";
 export { NestedArchiveGuardValidator } from "./zip/before-unzip/nested-archive-guard.js";
 export { SymlinkEntryGuardValidator } from "./zip/before-unzip/symlink-entry-guard.js";
+export { EncryptedEntryGuardValidator } from "./zip/before-unzip/encrypted-entry-guard.js";
+export { NonRecursiveBombGuardValidator } from "./zip/before-unzip/non-recursive-bomb-guard.js";
+export { DeviceNameGuardValidator } from "./zip/before-unzip/device-name-guard.js";
+export { UnicodeControlGuardValidator } from "./zip/before-unzip/unicode-control-guard.js";
+export { TrailingCharacterGuardValidator } from "./zip/before-unzip/trailing-character-guard.js";
+export { NestedZipInspectorValidator, createNestedZipInspectorValidator } from "./zip/after-unzip/nested-zip-inspector.js";
+export { DangerousExtensionGuardValidator, createDangerousExtensionGuardValidator } from "./zip/after-unzip/dangerous-extension-guard.js";

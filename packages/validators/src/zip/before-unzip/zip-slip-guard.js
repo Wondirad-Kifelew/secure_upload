@@ -34,7 +34,7 @@ function readZipEntryNames(buffer) {
   return new Promise((resolve, reject) => {
     // decodeStrings: false — read raw names ourselves so yauzl's own
     // path-safety check doesn't abort reading before WE get to inspect them.
-    yauzl.fromBuffer(buffer, { lazyEntries: true, decodeStrings: false }, (err, zipfile) => {
+       yauzl.fromBuffer(buffer, { lazyEntries: true, decodeStrings: false, validateEntrySizes: false }, (err, zipfile) => {
       if (err) return reject(err);
       const names = [];
       zipfile.readEntry();

@@ -13,6 +13,13 @@ import {
   DuplicateEntryGuardValidator,
   NestedArchiveGuardValidator,
   SymlinkEntryGuardValidator,
+  EncryptedEntryGuardValidator,
+  NonRecursiveBombGuardValidator,
+  DeviceNameGuardValidator,
+  UnicodeControlGuardValidator,
+  TrailingCharacterGuardValidator,
+  DangerousExtensionGuardValidator,
+  NestedZipInspectorValidator,
 } from "@secureupload/validators";
 import { createClamAVScanner, createYaraScanner, FakeScanner } from "@secureupload/scanners";
 
@@ -107,6 +114,13 @@ export function createDefaultService() {
       DuplicateEntryGuardValidator,
       NestedArchiveGuardValidator,
       SymlinkEntryGuardValidator,
+      EncryptedEntryGuardValidator,
+      NonRecursiveBombGuardValidator,
+      DeviceNameGuardValidator,
+      UnicodeControlGuardValidator,
+      TrailingCharacterGuardValidator,
+      DangerousExtensionGuardValidator,
+      NestedZipInspectorValidator,
     ],
     scanners,
     quarantineStore: new QuarantineStore({
