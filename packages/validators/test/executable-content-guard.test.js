@@ -19,14 +19,29 @@ function buildZip(files) {
   });
 }
 
+function createRealisticPEHeader() {
+  const buf = Buffer.alloc(68);
+  // MZ signature at byte 0
+  buf[0] = 0x4d;
+  buf[1] = 0x5a;
+  // Offset 64 stored as 32-bit LE number at byte offset 60
+  buf.writeUInt32LE(64, 60);
+  // "PE\0\0" (50 45 00 00) at byte 64
+  buf[64] = 0x50;
+  buf[65] = 0x45;
+  buf[66] = 0x00;
+  buf[67] = 0x00;
+  return buf;
+}
+
 describe("ExecutableContentGuardValidator", () => {
   test("has expected validator shape", () => {
     expect(ExecutableContentGuardValidator.name).toBe("Executable Content Guard");
     expect(typeof ExecutableContentGuardValidator.validate).toBe("function");
   });
 
-  test("flags Windows PE (MZ) as high severity", async () => {
-    const peBuffer = Buffer.from([0x4d, 0x5a, 0x90, 0x00, 0x03, 0x00]);
+  test("flags realistic Windows PE as high severity", async () => {
+    const peBuffer = createRealisticPEHeader();
     const findings = await ExecutableContentGuardValidator.validate(peBuffer, {
       filename: "notes.txt",
     });
@@ -40,6 +55,16 @@ describe("ExecutableContentGuardValidator", () => {
       filename: "notes.txt",
       detectedType: "Windows PE executable",
     });
+  });
+
+  test("text buffer starting with 'MZ Industries ...' is NOT flagged as PE", async () => {
+    const textBuffer = Buffer.from(
+      "MZ Industries is an enterprise organization providing reliable technology services across the globe."
+    );
+    const findings = await ExecutableContentGuardValidator.validate(textBuffer, {
+      filename: "about.txt",
+    });
+    expect(findings).toEqual([]);
   });
 
   test("flags Linux ELF as high severity", async () => {
@@ -123,9 +148,9 @@ describe("ExecutableContentGuardValidator", () => {
     expect(findings).toEqual([]);
   });
 
-  test("integration: zip with notes.txt containing MZ bytes built with deflate compression produces zip-executable-content finding mentioning notes.txt", async () => {
-    const mzPayload = Buffer.from([0x4d, 0x5a, 0x90, 0x00, 0x03, 0x00, 0x00, 0x00]);
-    const zip = await buildZip({ "notes.txt": mzPayload });
+  test("integration: zip with notes.txt containing PE bytes built with deflate compression produces zip-executable-content finding mentioning notes.txt", async () => {
+    const pePayload = createRealisticPEHeader();
+    const zip = await buildZip({ "notes.txt": pePayload });
 
     const findings = await NestedZipInspectorValidator.validate(zip, { filename: "archive.zip" });
     const finding = findings.find((f) => f.rule === "zip-executable-content");

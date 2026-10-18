@@ -10,6 +10,19 @@
  * Runs on individual extracted entries in `after-unzip`.
  */
 
+function isWindowsPE(buffer) {
+  if (buffer.length < 64) return false;
+  if (buffer[0] !== 0x4d || buffer[1] !== 0x5a) return false;
+  const peOffset = buffer.readUInt32LE(60);
+  if (peOffset + 4 > buffer.length) return false;
+  return (
+    buffer[peOffset] === 0x50 &&
+    buffer[peOffset + 1] === 0x45 &&
+    buffer[peOffset + 2] === 0x00 &&
+    buffer[peOffset + 3] === 0x00
+  );
+}
+
 export function createExecutableContentGuardValidator() {
   return {
     name: "Executable Content Guard",
@@ -32,8 +45,9 @@ export function createExecutableContentGuardValidator() {
       const b0 = buffer[0];
       const b1 = buffer[1];
 
-      // Windows PE: starts with 4D 5A ("MZ")
-      if (b0 === 0x4d && b1 === 0x5a) {
+      // Windows PE: starts with "MZ", >= 64 bytes, and uint32LE at offset 60 points
+      // to "PE\0\0" (50 45 00 00) inside the buffer.
+      if (isWindowsPE(buffer)) {
         detectedType = "Windows PE executable";
         severity = "high";
       }
