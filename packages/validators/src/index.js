@@ -15,3 +15,4 @@ export { UnicodeControlGuardValidator } from "./zip/before-unzip/unicode-control
 export { TrailingCharacterGuardValidator } from "./zip/before-unzip/trailing-character-guard.js";
 export { NestedZipInspectorValidator, createNestedZipInspectorValidator } from "./zip/after-unzip/nested-zip-inspector.js";
 export { DangerousExtensionGuardValidator, createDangerousExtensionGuardValidator } from "./zip/after-unzip/dangerous-extension-guard.js";
+export { ExecutableContentGuardValidator, createExecutableContentGuardValidator } from "./zip/after-unzip/executable-content-guard.js";

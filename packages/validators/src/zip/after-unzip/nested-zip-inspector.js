@@ -14,6 +14,7 @@ import { DeviceNameGuardValidator } from "../before-unzip/device-name-guard.js";
 import { UnicodeControlGuardValidator } from "../before-unzip/unicode-control-guard.js";
 import { TrailingCharacterGuardValidator } from "../before-unzip/trailing-character-guard.js";
 import { DangerousExtensionGuardValidator } from "./dangerous-extension-guard.js";
+import { ExecutableContentGuardValidator } from "./executable-content-guard.js";
 /**
  * NestedZipInspectorValidator
  * ----------------------------
@@ -73,6 +74,7 @@ const DEFAULT_GUARDS = [
   UnicodeControlGuardValidator,
   TrailingCharacterGuardValidator,
   DangerousExtensionGuardValidator,
+  ExecutableContentGuardValidator,
 ];
 
 class DepthExceededError extends Error {}
