@@ -27,6 +27,7 @@ services:
       - "3000:3000"
     environment:
       PORT: "3000"
+      API_KEY: ${API_KEY:?set API_KEY in a .env file}
       CLAMD_HOST: clamav
       CLAMD_PORT: "3310"
       QUARANTINE_ROOT: /app/quarantine-data
