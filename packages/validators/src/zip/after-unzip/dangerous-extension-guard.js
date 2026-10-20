@@ -1,3 +1,10 @@
+/**
+ * NOTE FOR DEVELOPERS: this guard is strict on purpose. Do not enable it for
+ * apps that accept code or software (project submissions, installers, mods,
+ * plugins, scripts, web projects), or relax it first. See
+ * packages/validators/src/zip/README.md.
+ */
+
 import path from "node:path";
 
 /**
