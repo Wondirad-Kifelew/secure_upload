@@ -65,9 +65,14 @@ function decideVerdict(findings) {
 // send these by default). For them we detect the type from the bytes instead.
 const GENERIC_TYPES = new Set(["application/octet-stream", "application/x-www-form-urlencoded", "binary/octet-stream"]);
 
+const MIME_ALIASES = new Map([
+  ["application/x-zip-compressed", "application/zip"],
+  ["application/x-zip", "application/zip"],
+  ["multipart/x-zip", "application/zip"],
+]);
 async function resolveDeclaredType(header, buffer) {
   const declared = header ? header.split(";")[0].trim().toLowerCase() : "";
-  if (declared && !GENERIC_TYPES.has(declared)) return declared;
+  if (declared && !GENERIC_TYPES.has(declared)) return MIME_ALIASES.get(declared) ?? declared;
   const detected = await fileTypeFromBuffer(buffer);
   return detected?.mime ?? null;
 }
