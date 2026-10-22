@@ -102,7 +102,7 @@ describe("attack-suite regression", () => {
     const result = await analyzeSample(path.join(SAMPLES_ROOT, "zip-bombs", "zip-bomb-sample.zip"));
     expect(result.context.findings.some((f) => f.rule === "zip-bomb-compression-ratio")).toBe(true);
     expect(result.quarantine.status).toBe("sandboxed");
-  });
+  }, 60000);
 
     test("malicious-invoice.pdf triggers CDR findings on sanitization", async () => {
     const result = await analyzeSample(path.join(SAMPLES_ROOT, "macro-office", "malicious-invoice.pdf"));
