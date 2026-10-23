@@ -78,17 +78,26 @@ export class UploadSecurityService {
 
     const context = new PipelineContext({ filename, declaredMimeType });
     await this.validationPipeline.run(buffer, context);
-    try {
-      await this.scanPipeline.run(buffer, context);
-    } catch (error) {
-      context.addFinding({
-        rule: "scanner-failed",
-        severity: "medium",
-        stage: "scan",
-        source: "Scan Pipeline",
-        message: `A scanner failed to run: ${error.message}. The file was not fully scanned, so it cannot be released as clean.`,
-        details: { reason: error.message },
-      });
+
+    // Skip the scan pipeline if validators already found a blocking severity
+    // (high or extreme); the verdict is going to be BLOCK anyway and waiting
+    // for ClamAV (up to 30 s on big files) adds nothing.
+    const alreadyBlocking =
+      context.highestSeverity === "high" || context.highestSeverity === "extreme";
+
+    if (!alreadyBlocking) {
+      try {
+        await this.scanPipeline.run(buffer, context);
+      } catch (error) {
+        context.addFinding({
+          rule: "scanner-failed",
+          severity: "medium",
+          stage: "scan",
+          source: "Scan Pipeline",
+          message: `A scanner failed to run: ${error.message}. The file was not fully scanned, so it cannot be released as clean.`,
+          details: { reason: error.message },
+        });
+      }
     }
 
     // CDR: rebuild a clean version of the file before anything downstream

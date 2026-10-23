@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { MagicByteValidator, ZipSlipGuardValidator } from "@secureupload/validators";
+import { MagicByteValidator } from "@secureupload/validators";
 import { QuarantineStore } from "@secureupload/quarantine";
 import { DryRunSandboxAdapter, SandboxManager } from "@secureupload/sandbox";
 import { UploadSecurityService } from "../src/index.js";
@@ -49,7 +49,7 @@ describe("UploadSecurityService", () => {
         sandboxManager,
       });
 
-     const png = Buffer.from([
+      const png = Buffer.from([
         137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1, 0, 0, 0, 1, 8,
         2, 0, 0, 0, 144, 119, 83, 222, 0, 0, 0, 9, 112, 72, 89, 115, 0, 0, 3, 232, 0, 0, 3, 232, 1,
         181, 123, 82, 107, 0, 0, 0, 12, 73, 68, 65, 84, 8, 153, 99, 248, 207, 192, 0, 0, 3, 1, 1,
@@ -98,92 +98,6 @@ describe("UploadSecurityService", () => {
     }
   });
 
-function crc32(buf) {
-  let table = crc32.table;
-  if (!table) {
-    table = crc32.table = new Uint32Array(256);
-    for (let n = 0; n < 256; n++) {
-      let c = n;
-      for (let k = 0; k < 8; k++) {
-        c = c & 1 ? (0xedb88320 ^ (c >>> 1)) : (c >>> 1);
-      }
-      table[n] = c;
-    }
-  }
-  let crc = 0xffffffff;
-  for (let i = 0; i < buf.length; i++) {
-    crc = table[(crc ^ buf[i]) & 0xff] ^ (crc >>> 8);
-  }
-  return (crc ^ 0xffffffff) >>> 0;
-}
-
-function buildZip(files) {
-  const localParts = [];
-  const centralParts = [];
-  let offset = 0;
-
-  for (const [name, content] of Object.entries(files)) {
-    const nameBuf = Buffer.from(name, "utf8");
-    const crc = crc32(content);
-    const size = content.length;
-
-    const localHeader = Buffer.alloc(30);
-    localHeader.writeUInt32LE(0x04034b50, 0);
-    localHeader.writeUInt16LE(20, 4);
-    localHeader.writeUInt16LE(0, 6);
-    localHeader.writeUInt16LE(0, 8);
-    localHeader.writeUInt16LE(0, 10);
-    localHeader.writeUInt16LE(0, 12);
-    localHeader.writeUInt32LE(crc, 14);
-    localHeader.writeUInt32LE(size, 18);
-    localHeader.writeUInt32LE(size, 22);
-    localHeader.writeUInt16LE(nameBuf.length, 26);
-    localHeader.writeUInt16LE(0, 28);
-
-    const localEntry = Buffer.concat([localHeader, nameBuf, content]);
-    localParts.push(localEntry);
-
-    const centralHeader = Buffer.alloc(46);
-    centralHeader.writeUInt32LE(0x02014b50, 0);
-    centralHeader.writeUInt16LE(20, 4);
-    centralHeader.writeUInt16LE(20, 6);
-    centralHeader.writeUInt16LE(0, 8);
-    centralHeader.writeUInt16LE(0, 10);
-    centralHeader.writeUInt16LE(0, 12);
-    centralHeader.writeUInt16LE(0, 14);
-    centralHeader.writeUInt32LE(crc, 16);
-    centralHeader.writeUInt32LE(size, 20);
-    centralHeader.writeUInt32LE(size, 24);
-    centralHeader.writeUInt16LE(nameBuf.length, 28);
-    centralHeader.writeUInt16LE(0, 30);
-    centralHeader.writeUInt16LE(0, 32);
-    centralHeader.writeUInt16LE(0, 34);
-    centralHeader.writeUInt16LE(0, 36);
-    centralHeader.writeUInt32LE(0, 38);
-    centralHeader.writeUInt32LE(offset, 42);
-
-    const centralEntry = Buffer.concat([centralHeader, nameBuf]);
-    centralParts.push(centralEntry);
-
-    offset += localEntry.length;
-  }
-
-  const localSection = Buffer.concat(localParts);
-  const centralSection = Buffer.concat(centralParts);
-
-  const end = Buffer.alloc(22);
-  end.writeUInt32LE(0x06054b50, 0);
-  end.writeUInt16LE(0, 4);
-  end.writeUInt16LE(0, 6);
-  end.writeUInt16LE(centralParts.length, 8);
-  end.writeUInt16LE(centralParts.length, 10);
-  end.writeUInt32LE(centralSection.length, 12);
-  end.writeUInt32LE(localSection.length, 16);
-  end.writeUInt16LE(0, 20);
-
-  return Buffer.concat([localSection, centralSection, end]);
-}
-
   test("handles a throwing scanner on clean upload without failing analysis", async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "secureupload-service-"));
     try {
@@ -217,11 +131,25 @@ function buildZip(files) {
     }
   });
 
-  test("retains validator findings when scanner throws on malicious file", async () => {
+  test("retains validator findings when scanner throws on non-blocking file", async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "secureupload-service-"));
     try {
       const quarantineStore = new QuarantineStore({ rootDirectory: root });
       const sandboxManager = new SandboxManager({ adapter: new DryRunSandboxAdapter() });
+      const mediumValidator = {
+        name: "Medium Validator",
+        async validate() {
+          return [
+            {
+              rule: "extension-declared-mismatch",
+              severity: "medium",
+              stage: "validation",
+              source: "Medium Validator",
+              message: "Extension does not match declared MIME type.",
+            },
+          ];
+        },
+      };
       const throwingScanner = {
         name: "Broken Scanner",
         async scan() {
@@ -229,21 +157,147 @@ function buildZip(files) {
         },
       };
       const service = new UploadSecurityService({
-        validators: [ZipSlipGuardValidator],
+        validators: [mediumValidator],
         scanners: [throwingScanner],
         quarantineStore,
         sandboxManager,
       });
 
-      const evilZip = buildZip({ "../../evil.txt": Buffer.from("payload") });
       const result = await service.analyze({
-        buffer: evilZip,
+        buffer: Buffer.from("sample content"),
+        filename: "test.txt",
+        declaredMimeType: "text/plain",
+      });
+
+      expect(result.context.findings.some((f) => f.rule === "extension-declared-mismatch")).toBe(true);
+      expect(result.context.findings.some((f) => f.rule === "scanner-failed")).toBe(true);
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("skips scanner when validator returns an extreme finding", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "secureupload-service-"));
+    try {
+      const quarantineStore = new QuarantineStore({ rootDirectory: root });
+      const sandboxManager = new SandboxManager({ adapter: new DryRunSandboxAdapter() });
+      let scannerCalled = false;
+      const recordingScanner = {
+        name: "Recording Scanner",
+        async scan() {
+          scannerCalled = true;
+          return { clean: true };
+        },
+      };
+      const extremeValidator = {
+        name: "Extreme Validator",
+        async validate() {
+          return [
+            {
+              rule: "zip-slip-path-traversal",
+              severity: "extreme",
+              stage: "validation",
+              source: "Extreme Validator",
+              message: "Archive entry points outside target directory.",
+            },
+          ];
+        },
+      };
+      const service = new UploadSecurityService({
+        validators: [extremeValidator],
+        scanners: [recordingScanner],
+        quarantineStore,
+        sandboxManager,
+      });
+
+      const result = await service.analyze({
+        buffer: Buffer.from("payload"),
         filename: "test.zip",
         declaredMimeType: "application/zip",
       });
 
+      expect(scannerCalled).toBe(false);
       expect(result.context.findings.some((f) => f.rule === "zip-slip-path-traversal")).toBe(true);
-      expect(result.context.findings.some((f) => f.rule === "scanner-failed")).toBe(true);
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("calls scanner when validator returns only a medium finding", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "secureupload-service-"));
+    try {
+      const quarantineStore = new QuarantineStore({ rootDirectory: root });
+      const sandboxManager = new SandboxManager({ adapter: new DryRunSandboxAdapter() });
+      let scannerCalled = false;
+      const recordingScanner = {
+        name: "Recording Scanner",
+        async scan() {
+          scannerCalled = true;
+          return { clean: true };
+        },
+      };
+      const mediumValidator = {
+        name: "Medium Validator",
+        async validate() {
+          return [
+            {
+              rule: "extension-declared-mismatch",
+              severity: "medium",
+              stage: "validation",
+              source: "Medium Validator",
+              message: "Extension does not match declared MIME type.",
+            },
+          ];
+        },
+      };
+      const service = new UploadSecurityService({
+        validators: [mediumValidator],
+        scanners: [recordingScanner],
+        quarantineStore,
+        sandboxManager,
+      });
+
+      const result = await service.analyze({
+        buffer: Buffer.from("payload"),
+        filename: "test.bin",
+        declaredMimeType: "application/octet-stream",
+      });
+
+      expect(scannerCalled).toBe(true);
+      expect(result.context.findings.some((f) => f.rule === "extension-declared-mismatch")).toBe(true);
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("calls scanner when validators produce no findings", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "secureupload-service-"));
+    try {
+      const quarantineStore = new QuarantineStore({ rootDirectory: root });
+      const sandboxManager = new SandboxManager({ adapter: new DryRunSandboxAdapter() });
+      let scannerCalled = false;
+      const recordingScanner = {
+        name: "Recording Scanner",
+        async scan() {
+          scannerCalled = true;
+          return { clean: true };
+        },
+      };
+      const service = new UploadSecurityService({
+        validators: [],
+        scanners: [recordingScanner],
+        quarantineStore,
+        sandboxManager,
+      });
+
+      const result = await service.analyze({
+        buffer: Buffer.from("clean document"),
+        filename: "notes.txt",
+        declaredMimeType: "text/plain",
+      });
+
+      expect(scannerCalled).toBe(true);
+      expect(result.context.findings.length).toBe(0);
     } finally {
       await fs.rm(root, { recursive: true, force: true });
     }
