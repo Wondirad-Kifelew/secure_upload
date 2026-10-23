@@ -111,11 +111,27 @@ describe("ZipSlipGuardValidator", () => {
     expect(findings).toEqual([]);
   });
 
+  test("ordinary relative path docs/readme.txt is not flagged", async () => {
+    const zip = buildZip({ "docs/readme.txt": Buffer.from("hello") });
+    const findings = await ZipSlipGuardValidator.validate(zip);
+    expect(findings).toEqual([]);
+  });
+
   test("flags an entry name containing literal path traversal", async () => {
     const zip = buildZip({ "../../etc/passwd": Buffer.from("evil") });
     const findings = await ZipSlipGuardValidator.validate(zip);
     expect(findings).toHaveLength(1);
     expect(findings[0].rule).toBe("zip-slip-path-traversal");
+    expect(findings[0].severity).toBe("extreme");
+  });
+
+  test("flags traversal path ../../evil.txt as extreme", async () => {
+    const zip = buildZip({ "../../evil.txt": Buffer.from("evil") });
+    const findings = await ZipSlipGuardValidator.validate(zip);
+    expect(findings).toHaveLength(1);
+    expect(findings[0].rule).toBe("zip-slip-path-traversal");
+    expect(findings[0].severity).toBe("extreme");
+    expect(findings[0].details.fileName).toBe("../../evil.txt");
   });
 
   test("flags a traversal sequence buried inside a normal-looking subfolder", async () => {
@@ -123,6 +139,7 @@ describe("ZipSlipGuardValidator", () => {
     const findings = await ZipSlipGuardValidator.validate(zip);
     expect(findings).toHaveLength(1);
     expect(findings[0].rule).toBe("zip-slip-path-traversal");
+    expect(findings[0].severity).toBe("extreme");
   });
 
   test("flags a Windows-style backslash traversal sequence", async () => {
@@ -130,6 +147,7 @@ describe("ZipSlipGuardValidator", () => {
     const findings = await ZipSlipGuardValidator.validate(zip);
     expect(findings).toHaveLength(1);
     expect(findings[0].rule).toBe("zip-slip-path-traversal");
+    expect(findings[0].severity).toBe("extreme");
   });
 
   test("flags an entry name that is an absolute Unix path", async () => {
@@ -137,13 +155,60 @@ describe("ZipSlipGuardValidator", () => {
     const findings = await ZipSlipGuardValidator.validate(zip);
     expect(findings).toHaveLength(1);
     expect(findings[0].rule).toBe("zip-slip-path-traversal");
+    expect(findings[0].severity).toBe("extreme");
   });
 
-  test("flags an entry name that is an absolute Windows path", async () => {
+  test("flags absolute path /etc/cron.d/evil.txt as extreme", async () => {
+    const zip = buildZip({ "/etc/cron.d/evil.txt": Buffer.from("evil") });
+    const findings = await ZipSlipGuardValidator.validate(zip);
+    expect(findings).toHaveLength(1);
+    expect(findings[0].rule).toBe("zip-slip-path-traversal");
+    expect(findings[0].severity).toBe("extreme");
+    expect(findings[0].details.fileName).toBe("/etc/cron.d/evil.txt");
+  });
+
+  test("flags an entry name that is an absolute Windows backslash path", async () => {
     const zip = buildZip({ "C:\\Windows\\System32\\evil.dll": Buffer.from("evil") });
     const findings = await ZipSlipGuardValidator.validate(zip);
     expect(findings).toHaveLength(1);
     expect(findings[0].rule).toBe("zip-slip-path-traversal");
+    expect(findings[0].severity).toBe("extreme");
+  });
+
+  test("flags C:/Windows/temp/evil.txt as extreme zip-slip", async () => {
+    const zip = buildZip({ "C:/Windows/temp/evil.txt": Buffer.from("evil") });
+    const findings = await ZipSlipGuardValidator.validate(zip);
+    expect(findings).toHaveLength(1);
+    expect(findings[0].rule).toBe("zip-slip-path-traversal");
+    expect(findings[0].severity).toBe("extreme");
+    expect(findings[0].details.fileName).toBe("C:/Windows/temp/evil.txt");
+  });
+
+  test("flags \\\\server\\share\\payload.txt as extreme zip-slip", async () => {
+    const zip = buildZip({ "\\\\server\\share\\payload.txt": Buffer.from("evil") });
+    const findings = await ZipSlipGuardValidator.validate(zip);
+    expect(findings).toHaveLength(1);
+    expect(findings[0].rule).toBe("zip-slip-path-traversal");
+    expect(findings[0].severity).toBe("extreme");
+    expect(findings[0].details.fileName).toBe("\\\\server\\share\\payload.txt");
+  });
+
+  test("flags C:evil.txt as high severity zip-drive-relative-path", async () => {
+    const zip = buildZip({ "C:evil.txt": Buffer.from("evil") });
+    const findings = await ZipSlipGuardValidator.validate(zip);
+    expect(findings).toHaveLength(1);
+    expect(findings[0].rule).toBe("zip-drive-relative-path");
+    expect(findings[0].severity).toBe("high");
+    expect(findings[0].details.fileName).toBe("C:evil.txt");
+  });
+
+  test("flags a:b.txt as high severity zip-drive-relative-path", async () => {
+    const zip = buildZip({ "a:b.txt": Buffer.from("evil") });
+    const findings = await ZipSlipGuardValidator.validate(zip);
+    expect(findings).toHaveLength(1);
+    expect(findings[0].rule).toBe("zip-drive-relative-path");
+    expect(findings[0].severity).toBe("high");
+    expect(findings[0].details.fileName).toBe("a:b.txt");
   });
 
   test("a corrupted/truncated zip produces no findings rather than throwing", async () => {

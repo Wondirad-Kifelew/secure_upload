@@ -27,6 +27,7 @@ import {
   DeviceNameGuardValidator,
   UnicodeControlGuardValidator,
   TrailingCharacterGuardValidator,
+  ArchiveIntegrityGuardValidator,
   DangerousExtensionGuardValidator,
   NestedZipInspectorValidator
 } from "@secureupload/validators";
@@ -64,6 +65,7 @@ const validationPipeline = new ValidationPipeline([
   DeviceNameGuardValidator,
   UnicodeControlGuardValidator,
   TrailingCharacterGuardValidator,
+  ArchiveIntegrityGuardValidator,
   DangerousExtensionGuardValidator,
 ]);
 await validationPipeline.run(buffer, context);

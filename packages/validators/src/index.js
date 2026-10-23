@@ -13,6 +13,7 @@ export { NonRecursiveBombGuardValidator } from "./zip/before-unzip/non-recursive
 export { DeviceNameGuardValidator } from "./zip/before-unzip/device-name-guard.js";
 export { UnicodeControlGuardValidator } from "./zip/before-unzip/unicode-control-guard.js";
 export { TrailingCharacterGuardValidator } from "./zip/before-unzip/trailing-character-guard.js";
+export { ArchiveIntegrityGuardValidator } from "./zip/before-unzip/archive-integrity-guard.js";
 export { NestedZipInspectorValidator, createNestedZipInspectorValidator } from "./zip/after-unzip/nested-zip-inspector.js";
 export { DangerousExtensionGuardValidator, createDangerousExtensionGuardValidator } from "./zip/after-unzip/dangerous-extension-guard.js";
 export { ExecutableContentGuardValidator, createExecutableContentGuardValidator } from "./zip/after-unzip/executable-content-guard.js";
