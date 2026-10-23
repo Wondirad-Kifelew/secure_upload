@@ -78,7 +78,18 @@ export class UploadSecurityService {
 
     const context = new PipelineContext({ filename, declaredMimeType });
     await this.validationPipeline.run(buffer, context);
-    await this.scanPipeline.run(buffer, context);
+    try {
+      await this.scanPipeline.run(buffer, context);
+    } catch (error) {
+      context.addFinding({
+        rule: "scanner-failed",
+        severity: "medium",
+        stage: "scan",
+        source: "Scan Pipeline",
+        message: `A scanner failed to run: ${error.message}. The file was not fully scanned, so it cannot be released as clean.`,
+        details: { reason: error.message },
+      });
+    }
 
     // CDR: rebuild a clean version of the file before anything downstream
     // treats it as trusted. Unconditional for types with a sanitizer; types
