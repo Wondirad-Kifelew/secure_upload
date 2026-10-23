@@ -335,20 +335,11 @@ function checkGif(buffer) {
       const label = buffer[offset++];
       const isMetadata = label === 0xFE || label === 0xFF;
 
-      let subBlockCount = 0;
+      // Sub-block loops need no count cap because every iteration advances
+      // offset by at least 1 byte (the length byte), guaranteeing linear
+      // progress and natural termination at the buffer boundary.
       let broken = false;
       while (offset < buffer.length) {
-        if (++subBlockCount > MAX_SEGMENTS) {
-          findings.push({
-            rule: "image-structure-invalid",
-            severity: "medium",
-            message: "Image structure is invalid: exceeded maximum sub-block count in GIF.",
-            details: { reason: "exceeded maximum sub-block count" },
-          });
-          broken = true;
-          break;
-        }
-
         const subLength = buffer[offset++];
         if (subLength === 0) {
           break;
@@ -412,20 +403,11 @@ function checkGif(buffer) {
       }
       offset++; // Skip LZW min code size
 
-      let subBlockCount = 0;
+      // Image data sub-blocks need no count cap because every iteration
+      // advances offset by at least 1 byte (the length byte), guaranteeing linear
+      // progress and natural termination at the buffer boundary.
       let broken = false;
       while (offset < buffer.length) {
-        if (++subBlockCount > MAX_SEGMENTS) {
-          findings.push({
-            rule: "image-structure-invalid",
-            severity: "medium",
-            message: "Image structure is invalid: exceeded maximum image data sub-blocks in GIF.",
-            details: { reason: "exceeded maximum image data sub-blocks" },
-          });
-          broken = true;
-          break;
-        }
-
         const subLength = buffer[offset++];
         if (subLength === 0) {
           break;

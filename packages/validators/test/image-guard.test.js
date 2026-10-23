@@ -122,6 +122,8 @@ function createMinimalGif({
   height = 1,
   includeTrailer = true,
   metadataExtensions = [],
+  imageDataSubBlocks = null,
+  truncateImageDataMidSubBlock = false,
 } = {}) {
   const parts = [];
   parts.push(Buffer.from("GIF89a", "ascii"));
@@ -151,7 +153,20 @@ function createMinimalGif({
   imgDesc[9] = 0;
   parts.push(imgDesc);
 
-  parts.push(Buffer.from([0x02, 0x02, 0x4C, 0x01, 0x00]));
+  // LZW minimum code size
+  parts.push(Buffer.from([0x02]));
+
+  if (truncateImageDataMidSubBlock) {
+    // Sub-block length claims 255, but only 10 bytes provided and no trailer
+    parts.push(Buffer.from([255]), Buffer.alloc(10));
+  } else if (imageDataSubBlocks) {
+    for (const sub of imageDataSubBlocks) {
+      parts.push(Buffer.from([sub.length]), sub);
+    }
+    parts.push(Buffer.from([0x00])); // Terminator
+  } else {
+    parts.push(Buffer.from([0x02, 0x4C, 0x01, 0x00]));
+  }
 
   if (includeTrailer) {
     parts.push(Buffer.from([0x3B]));
@@ -182,7 +197,6 @@ describe("ImageGuardValidator", () => {
   });
 
   test("JPEG with 300 KB total of COM segments triggers image-oversized-metadata; one 6 KB APP1 does not", async () => {
-    // 5 COM segments of 60 KB each = 300 KB total metadata
     const comSegments = Array.from({ length: 5 }, () => Buffer.alloc(60 * 1024));
     const oversizedJpeg = createMinimalJpeg({ comSegments });
     const oversizedFindings = await ImageGuardValidator.validate(oversizedJpeg);
@@ -192,7 +206,6 @@ describe("ImageGuardValidator", () => {
     expect(finding.severity).toBe("medium");
     expect(finding.details.metadataBytes).toBeGreaterThan(256 * 1024);
 
-    // Normal metadata: one 6 KB APP1 segment
     const normalJpeg = createMinimalJpeg({
       appSegments: [{ marker: 0xE1, data: Buffer.alloc(6 * 1024) }],
     });
@@ -214,23 +227,51 @@ describe("ImageGuardValidator", () => {
     expect(gifFindings.some((f) => f.rule === "image-structure-invalid")).toBe(true);
   });
 
+  test("valid single-frame GIF with 5 MB of image data built from 255-byte sub-blocks produces no findings in under 500 ms", async () => {
+    // 5 MB of image data built from 255-byte sub-blocks (~20,560 sub-blocks)
+    const subBlockData = Buffer.alloc(255, 0x42);
+    const count = Math.ceil((5 * 1024 * 1024) / 255);
+    const subBlocks = Array.from({ length: count }, () => subBlockData);
+    const largeGif = createMinimalGif({
+      width: 100,
+      height: 100,
+      imageDataSubBlocks: subBlocks,
+    });
+
+    const start = performance.now();
+    const findings = await ImageGuardValidator.validate(largeGif);
+    const elapsed = performance.now() - start;
+
+    expect(findings).toEqual([]);
+    expect(elapsed).toBeLessThan(500);
+  });
+
+  test("GIF whose image data is truncated mid sub-block triggers image-structure-invalid", async () => {
+    const truncatedGif = createMinimalGif({
+      width: 100,
+      height: 100,
+      truncateImageDataMidSubBlock: true,
+      includeTrailer: false,
+    });
+    const findings = await ImageGuardValidator.validate(truncatedGif);
+
+    expect(findings.some((f) => f.rule === "image-structure-invalid")).toBe(true);
+  });
+
   test("never throws on empty, 1-byte, corrupt segment length, or 1000 seeded random buffers", async () => {
     expect(Array.isArray(await ImageGuardValidator.validate(Buffer.alloc(0)))).toBe(true);
     expect(Array.isArray(await ImageGuardValidator.validate(Buffer.from([0x42])))).toBe(true);
 
-    // Segment length field is 0
     const zeroLenJpeg = createMinimalJpeg({ corruptLength: 0 });
     const zeroLenFindings = await ImageGuardValidator.validate(zeroLenJpeg);
     expect(Array.isArray(zeroLenFindings)).toBe(true);
     expect(zeroLenFindings.some((f) => f.rule === "image-structure-invalid")).toBe(true);
 
-    // Segment length field points past end
     const pastEndJpeg = createMinimalJpeg({ corruptLength: 60000 });
     const pastEndFindings = await ImageGuardValidator.validate(pastEndJpeg);
     expect(Array.isArray(pastEndFindings)).toBe(true);
     expect(pastEndFindings.some((f) => f.rule === "image-structure-invalid")).toBe(true);
 
-    // Seeded PRNG for reproducible test
     function mulberry32(seed) {
       return function () {
         let t = (seed += 0x6D2B79F5);
@@ -261,7 +302,6 @@ describe("ImageGuardValidator", () => {
   });
 
   test("performance: a 10 MB valid-looking buffer finishes in under 500 ms", async () => {
-    // 10 MB JPEG buffer with dummy scan data
     const jpegHead = createMinimalJpeg({ width: 1920, height: 1080 });
     const largeDummy = Buffer.alloc(10 * 1024 * 1024);
     const largeJpeg = Buffer.concat([jpegHead, largeDummy]);
