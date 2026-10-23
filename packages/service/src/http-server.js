@@ -21,6 +21,7 @@ import {
   DeviceNameGuardValidator,
   UnicodeControlGuardValidator,
   TrailingCharacterGuardValidator,
+  ArchiveIntegrityGuardValidator,
   DangerousExtensionGuardValidator,
   NestedZipInspectorValidator,
 } from "@secureupload/validators";
@@ -155,6 +156,7 @@ export function createDefaultService() {
       DeviceNameGuardValidator,
       UnicodeControlGuardValidator,
       TrailingCharacterGuardValidator,
+      ArchiveIntegrityGuardValidator,
       DangerousExtensionGuardValidator,
       NestedZipInspectorValidator,
     ],

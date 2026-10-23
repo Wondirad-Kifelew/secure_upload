@@ -9,7 +9,7 @@ import { MagicByteValidator, FilenameSanitizerValidator, MimeMismatchValidator,
   EntryCountGuardValidator, DuplicateEntryGuardValidator, NestedArchiveGuardValidator,
   SymlinkEntryGuardValidator, EncryptedEntryGuardValidator, NonRecursiveBombGuardValidator,
   DeviceNameGuardValidator, UnicodeControlGuardValidator, TrailingCharacterGuardValidator,
-  DangerousExtensionGuardValidator, NestedZipInspectorValidator } from "@secureupload/validators";
+  ArchiveIntegrityGuardValidator, DangerousExtensionGuardValidator, NestedZipInspectorValidator } from "@secureupload/validators";
 import { FakeScanner, createClamAVScanner } from "@secureupload/scanners";
 import { QuarantineStore } from "@secureupload/quarantine";
 import { SandboxManager, DryRunSandboxAdapter } from "@secureupload/sandbox";
@@ -48,7 +48,7 @@ const service = new UploadSecurityService({
     EntryCountGuardValidator, DuplicateEntryGuardValidator, NestedArchiveGuardValidator,
     SymlinkEntryGuardValidator, EncryptedEntryGuardValidator, NonRecursiveBombGuardValidator,
     DeviceNameGuardValidator, UnicodeControlGuardValidator, TrailingCharacterGuardValidator,
-    DangerousExtensionGuardValidator, NestedZipInspectorValidator,
+    ArchiveIntegrityGuardValidator, DangerousExtensionGuardValidator, NestedZipInspectorValidator,
   ],
   scanners,
   quarantineStore: new QuarantineStore({ rootDirectory: path.join(__dirname, ".test-quarantine") }),
