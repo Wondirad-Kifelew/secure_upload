@@ -68,4 +68,33 @@ describe("UploadSecurityService", () => {
       await fs.rm(root, { recursive: true, force: true });
     }
   });
+
+  test("moves a failed sandbox run to manual review", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "secureupload-service-"));
+    try {
+      const quarantineStore = new QuarantineStore({ rootDirectory: root });
+      const sandboxManager = new SandboxManager({
+        adapter: { async analyze() { throw new Error("sandbox unavailable"); } },
+        threshold: 60,
+      });
+      const service = new UploadSecurityService({
+        quarantineStore,
+        sandboxManager,
+        anomalyDetector: null,
+        aiProvider: null,
+      });
+
+      const result = await service.analyze({
+        buffer: Buffer.from("sample"),
+        filename: "sample.txt",
+        declaredMimeType: "text/plain",
+        riskScore: 80,
+      });
+
+      expect(result.sandbox.status).toBe("failed");
+      expect(result.quarantine.status).toBe("manual-review");
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
 });

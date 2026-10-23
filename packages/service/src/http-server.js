@@ -43,9 +43,20 @@ import { createClamAVScanner, createYaraScanner, FakeScanner } from "@secureuplo
  * No multipart parsing on purpose: a raw-body POST is enough for one file.
  */
 
-const MAX_UPLOAD_BYTES = Number(process.env.MAX_UPLOAD_MB || 10) * 1024 * 1024; // rejects oversized bodies before buffering them fully
-const MAX_CONCURRENT_SCANS = Number(process.env.MAX_CONCURRENT_SCANS || 4);
+function readPositiveSetting(name, defaultValue, { integer = false } = {}) {
+  const value = Number(process.env[name] || defaultValue);
+  if (!Number.isFinite(value) || value <= 0 || (integer && !Number.isInteger(value))) {
+    throw new Error(
+      integer ? `${name} must be a positive integer.` : `${name} must be a finite number greater than 0.`
+    );
+  }
+  return value;
+}
+
+const MAX_UPLOAD_BYTES = readPositiveSetting("MAX_UPLOAD_MB", 10) * 1024 * 1024; // rejects oversized bodies before buffering them fully
+const MAX_CONCURRENT_SCANS = readPositiveSetting("MAX_CONCURRENT_SCANS", 4, { integer: true });
 let activeScans = 0;
+const RELEASABLE_QUARANTINE_STATUSES = new Set(["quarantined", "sandboxed", "released"]);
 
 /**
  * allow  -> safe to use (the cleaned file can be downloaded)
@@ -54,7 +65,9 @@ let activeScans = 0;
  * Findings from a CDR step that SUCCEEDED describe what was removed from the
  * file, so the cleaned output is fine; only a failed sanitization counts.
  */
-function decideVerdict(findings) {
+function decideVerdict(findings, quarantineStatus) {
+  if (quarantineStatus === "manual-review") return "review";
+  if (!RELEASABLE_QUARANTINE_STATUSES.has(quarantineStatus)) return "block";
   const relevant = findings.filter((f) => f.stage !== "cdr" || f.rule === "cdr-sanitization-failed");
   const severities = new Set(relevant.map((f) => f.severity));
   if (severities.has("extreme") || severities.has("high")) return "block";
@@ -90,12 +103,14 @@ function readBody(req) {
   return new Promise((resolve, reject) => {
     const chunks = [];
     let total = 0;
+    let tooLarge = false;
 
     req.on("data", (chunk) => {
+      if (tooLarge) return;
       total += chunk.length;
       if (total > MAX_UPLOAD_BYTES) {
+        tooLarge = true;
         reject(Object.assign(new Error("Upload exceeds maximum allowed size."), { statusCode: 413 }));
-        req.destroy();
         return;
       }
       chunks.push(chunk);
@@ -204,7 +219,10 @@ export function createServer(service = createDefaultService()) {
         } catch {
           return sendJson(res, 404, { error: "File not found." });
         }
-        if (record.verdict !== "allow") {
+        if (
+          record.verdict !== "allow" ||
+          !RELEASABLE_QUARANTINE_STATUSES.has(record.status)
+        ) {
           return sendJson(res, 403, { error: "File was not approved, so it cannot be downloaded." });
         }
         const bytes = await fs.readFile(record.samplePath);
@@ -247,7 +265,7 @@ export function createServer(service = createDefaultService()) {
         const declaredMimeType = await resolveDeclaredType(typeHeader, buffer);
         const result = await service.analyze({ buffer, filename, declaredMimeType });
         const findings = result.context.findings;
-        const verdict = decideVerdict(findings);
+        const verdict = decideVerdict(findings, result.quarantine.status);
         await service.quarantineStore.annotate(result.quarantine.id, { verdict });
 
         // POST /clean: one request in, the cleaned file out.

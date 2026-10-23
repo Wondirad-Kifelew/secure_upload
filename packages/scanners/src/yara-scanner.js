@@ -55,7 +55,7 @@ export function createYaraScanner({ rulesPath, yaraBinary = "yara" } = {}) {
       // a fresh random name, so nothing attacker-controlled ever
       // touches the temp file path.
       const tempFilePath = path.join(os.tmpdir(), `secureupload-yara-${crypto.randomUUID()}`);
-      await fs.writeFile(tempFilePath, buffer);
+      await fs.writeFile(tempFilePath, buffer, { mode: 0o600, flag: "wx" });
 
       try {
         const { stdout } = await execFileAsync(yaraBinary, ["-m", rulesPath, tempFilePath]);
