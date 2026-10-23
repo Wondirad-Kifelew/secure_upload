@@ -87,12 +87,16 @@ function streamToClamd(buffer, { socketPath, host, port }) {
 
 function interpretResponse(response) {
   // Clean: "stream: OK"
-  if (response.endsWith("OK")) {
+  if (response === "stream: OK") {
     return { clean: true, findings: [] };
   }
 
+  if (/^stream:.*\bERROR\b/.test(response)) {
+    throw new Error(`Unexpected response from clamd: "${response}"`);
+  }
+
   // Infected: "stream: <SignatureName> FOUND"
-  const foundMatch = response.match(/stream:\s*(.+)\s+FOUND$/);
+  const foundMatch = response.match(/^stream:\s*(.+)\s+FOUND$/);
   if (foundMatch) {
     const virusName = foundMatch[1];
     return {

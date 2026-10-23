@@ -8,10 +8,8 @@ import { ImageSanitizer, PdfSanitizer, OoxmlSanitizer } from "@secureupload/cdr"
 
 
 /**
- * Which CDR sanitizer applies to a given declared MIME type. There is no
- * entry for OOXML (docx/xlsx/pptx) yet — that sanitizer doesn't exist,
- * so those files simply skip CDR and pass through as-is. Order matters:
- * first match wins.
+ * Which CDR sanitizer applies to a given declared MIME type. OOXML types
+ * listed below are handled by OoxmlSanitizer. Order matters: first match wins.
  */
 const OOXML_MIME_TYPES = new Set([
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -84,7 +82,7 @@ export class UploadSecurityService {
 
     // CDR: rebuild a clean version of the file before anything downstream
     // treats it as trusted. Unconditional for types with a sanitizer; types
-    // without one (OOXML, for now) pass through unchanged. A sanitizer that
+    // without one pass through unchanged. A sanitizer that
     // can't even parse the file isn't a crash — it's evidence the declared
     // type is a lie, so it becomes a finding and the original buffer carries
     // on rather than aborting the whole analysis.

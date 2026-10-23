@@ -1,5 +1,23 @@
 import fs from "node:fs";
+import net from "node:net";
 import { createClamAVScanner } from "../src/clamav-scanner.js";
+
+async function scanWithMockResponse(response) {
+  const server = net.createServer((socket) => {
+    socket.once("data", () => socket.end(`${response}\0`));
+  });
+  await new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", resolve);
+  });
+
+  try {
+    return await createClamAVScanner({ host: "127.0.0.1", port: server.address().port })
+      .scan(Buffer.from("sample upload"));
+  } finally {
+    await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+  }
+}
 
 /**
  * Unlike every other test file in this project, these tests need a
@@ -30,6 +48,32 @@ if (!clamdAvailable) {
 describe("ClamAVScanner", () => {
   test("throws when constructed without any connection info", () => {
     expect(() => createClamAVScanner({})).toThrow(/requires either/);
+  });
+
+  test("accepts the exact clean response", async () => {
+    await expect(scanWithMockResponse("stream: OK")).resolves.toEqual({ clean: true, findings: [] });
+  });
+
+  test("preserves valid infected response handling", async () => {
+    const result = await scanWithMockResponse("stream: Eicar-Test-Signature FOUND");
+    expect(result.clean).toBe(false);
+    expect(result.findings[0]).toMatchObject({
+      rule: "clamav-match",
+      severity: "extreme",
+      details: { virusName: "Eicar-Test-Signature" },
+    });
+  });
+
+  test.each([
+    "stream: ERROR: scanner unavailable OK",
+    "stream: ERROR: scanner unavailable",
+    "stream: ERROR signature FOUND",
+    "stream: OK trailing data",
+    "unexpected stream: OK",
+    "stream: signature FOUND trailing data",
+    "",
+  ])("rejects malformed response %p", async (response) => {
+    await expect(scanWithMockResponse(response)).rejects.toThrow(/Unexpected response from clamd/);
   });
 
   maybeTest("reports a harmless buffer as clean", async () => {
