@@ -277,9 +277,11 @@ describe("PolyglotDetectorValidator — Full Enterprise Suite", () => {
   describe("Layer 3: Trailing Payload & Slack Byte Boundaries", () => {
     test.each([
       [0, false],
-      [16, false],
-      [64, false], // Within 64-byte tolerance window
-      [65, true],  // First byte beyond 64-byte tolerance
+      [2, false],
+      [8, false],  // Within 8-byte tolerance window
+      [9, true],   // First byte beyond 8-byte tolerance
+      [34, true],
+      [64, true],
       [128, true],
       [1024, true],
     ])("PNG with %i extra bytes past IEND -> flagged: %s", async (extraBytes, shouldFlag) => {
@@ -298,9 +300,11 @@ describe("PolyglotDetectorValidator — Full Enterprise Suite", () => {
 
     test.each([
       [0, false],
-      [32, false],
-      [64, false],
-      [65, true],
+      [2, false],
+      [8, false],  // Within 8-byte tolerance window
+      [9, true],   // First byte beyond 8-byte tolerance
+      [34, true],
+      [64, true],
       [256, true],
     ])("JPEG with %i extra bytes past EOI (0xFFD9) -> flagged: %s", async (extraBytes, shouldFlag) => {
       const buffer = jpegBuffer({ extraTrailingBytes: extraBytes });
@@ -317,9 +321,11 @@ describe("PolyglotDetectorValidator — Full Enterprise Suite", () => {
 
     test.each([
       [0, false],
-      [32, false],
-      [64, false],
-      [65, true],
+      [2, false],
+      [8, false],  // Within 8-byte tolerance window
+      [9, true],   // First byte beyond 8-byte tolerance
+      [34, true],
+      [64, true],
       [200, true],
     ])("PDF with %i extra bytes past %%EOF -> flagged: %s", async (extraBytes, shouldFlag) => {
       const basePdf = pdfBuffer();
@@ -335,6 +341,79 @@ describe("PolyglotDetectorValidator — Full Enterprise Suite", () => {
       } else {
         expect(hit).toBeUndefined();
       }
+    });
+
+    test("valid JPEG with 34 trailing bytes after the end marker produces polyglot-trailing-payload finding (plain text)", async () => {
+      const buffer = Buffer.concat([jpegBuffer(), Buffer.from("HUCC{extra_bytes_after_the_image}\n")]);
+      expect(buffer.length - (buffer.lastIndexOf(Buffer.from([0xff, 0xd9])) + 2)).toBe(34);
+      const findings = await PolyglotDetectorValidator.validate(buffer);
+      const hit = findings.find((f) => f.rule === "polyglot-trailing-payload");
+      expect(hit).toBeDefined();
+      expect(hit.severity).toBe("medium");
+      expect(hit.details.trailingBytes).toBe(34);
+      expect(hit.details.toleranceBytes).toBe(8);
+      expect(hit.details.hiddenType).toBe("text");
+      expect(hit.details.hiddenLabel).toBe("plain text");
+      expect(hit.message).toContain("plain text");
+    });
+
+    test("trailing data starting with MZ produces kind program with high severity", async () => {
+      const buffer = Buffer.concat([jpegBuffer(), Buffer.from("MZ"), Buffer.alloc(16, 0x90)]);
+      const findings = await PolyglotDetectorValidator.validate(buffer);
+      const hit = findings.find((f) => f.rule === "polyglot-trailing-payload");
+      expect(hit).toBeDefined();
+      expect(hit.severity).toBe("high");
+      expect(hit.details.hiddenType).toBe("program");
+      expect(hit.details.hiddenLabel).toBe("Windows program (EXE/DLL)");
+      expect(hit.message).toContain("Windows program (EXE/DLL)");
+    });
+
+    test("trailing data starting with PK\\x03\\x04 produces kind archive with high severity", async () => {
+      const buffer = Buffer.concat([jpegBuffer(), Buffer.from([0x50, 0x4b, 0x03, 0x04]), Buffer.alloc(16, 0x00)]);
+      const findings = await PolyglotDetectorValidator.validate(buffer);
+      const hit = findings.find((f) => f.rule === "polyglot-trailing-payload");
+      expect(hit).toBeDefined();
+      expect(hit.severity).toBe("high");
+      expect(hit.details.hiddenType).toBe("archive");
+      expect(hit.details.hiddenLabel).toBe("ZIP archive (or Office file)");
+      expect(hit.message).toContain("ZIP archive (or Office file)");
+    });
+
+    test("trailing <script>alert(1)</script> produces kind script with high severity and safe preview without < or >", async () => {
+      const buffer = Buffer.concat([jpegBuffer(), Buffer.from("<script>alert(1)</script>")]);
+      const findings = await PolyglotDetectorValidator.validate(buffer);
+      const hit = findings.find((f) => f.rule === "polyglot-trailing-payload");
+      expect(hit).toBeDefined();
+      expect(hit.severity).toBe("high");
+      expect(hit.details.hiddenType).toBe("script");
+      expect(hit.details.hiddenLabel).toBe("script / web code");
+      expect(hit.message).not.toContain("<");
+      expect(hit.message).not.toContain(">");
+    });
+
+    test("trailing random non-text binary bytes produces kind binary with medium severity", async () => {
+      const buffer = Buffer.concat([jpegBuffer(), Buffer.from([0x00, 0x01, 0x02, 0x03, 0x80, 0x81, 0x82, 0xff, 0xaa, 0xbb])]);
+      const findings = await PolyglotDetectorValidator.validate(buffer);
+      const hit = findings.find((f) => f.rule === "polyglot-trailing-payload");
+      expect(hit).toBeDefined();
+      expect(hit.severity).toBe("medium");
+      expect(hit.details.hiddenType).toBe("binary");
+      expect(hit.details.hiddenLabel).toBe("unknown binary data");
+      expect(hit.message).toContain("unknown binary data");
+    });
+
+    test("valid JPEG with 2 trailing bytes (e.g. CRLF) does not produce polyglot-trailing-payload finding", async () => {
+      const buffer = Buffer.concat([jpegBuffer(), Buffer.from("\r\n")]);
+      const findings = await PolyglotDetectorValidator.validate(buffer);
+      const hit = findings.find((f) => f.rule === "polyglot-trailing-payload");
+      expect(hit).toBeUndefined();
+    });
+
+    test("clean JPEG with no trailing bytes does not produce polyglot-trailing-payload finding", async () => {
+      const buffer = jpegBuffer();
+      const findings = await PolyglotDetectorValidator.validate(buffer);
+      const hit = findings.find((f) => f.rule === "polyglot-trailing-payload");
+      expect(hit).toBeUndefined();
     });
 
     test("corrupted PNG IEND chunk length is handled safely without throwing", async () => {

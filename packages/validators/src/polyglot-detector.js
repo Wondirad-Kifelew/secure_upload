@@ -43,7 +43,10 @@ import { fileTypeFromBuffer } from "file-type";
 const DEFAULT_MAX_BUFFER_SIZE_TO_CHECK = 5 * 1024 * 1024;
 const MIN_NON_WHITESPACE_LENGTH = 10;
 const METADATA_REGION_SIZE = 64 * 1024;
-const TRAILING_PAYLOAD_TOLERANCE = 64;
+// Maximum trailing bytes allowed beyond a file's canonical end marker before
+// flagging. Small trailing padding or newline characters (e.g. \r\n) are normal,
+// but anything larger (> 8 bytes) is suspicious and held for review.
+const TRAILING_PAYLOAD_TOLERANCE = 8;
 const MAX_TOKENS_TO_SCAN = 10000;
 
 // Magic byte signatures
@@ -314,6 +317,159 @@ function pngEndOffset(buffer) {
   return undefined;
 }
 
+export function classifyHiddenData(trailingBytes) {
+  try {
+    if (!trailingBytes || !Buffer.isBuffer(trailingBytes) || trailingBytes.length === 0) {
+      return { kind: "binary", label: "unknown binary data" };
+    }
+    const sample = trailingBytes.subarray(0, 4096);
+
+    // 1. Windows program (EXE/DLL) - "MZ"
+    if (sample.length >= 2 && sample[0] === 0x4d && sample[1] === 0x5a) {
+      return { kind: "program", label: "Windows program (EXE/DLL)" };
+    }
+
+    // 2. Linux program (ELF) - 7F 45 4C 46
+    if (
+      sample.length >= 4 &&
+      sample[0] === 0x7f &&
+      sample[1] === 0x45 &&
+      sample[2] === 0x4c &&
+      sample[3] === 0x46
+    ) {
+      return { kind: "program", label: "Linux program (ELF)" };
+    }
+
+    // 3. Java class / macOS program - CA FE BA BE or FE ED FA CE/CF, CE/CF FA ED FE
+    if (
+      sample.length >= 4 &&
+      ((sample[0] === 0xca && sample[1] === 0xfe && sample[2] === 0xba && sample[3] === 0xbe) ||
+        (sample[0] === 0xfe &&
+          sample[1] === 0xed &&
+          sample[2] === 0xfa &&
+          (sample[3] === 0xce || sample[3] === 0xcf)) ||
+        ((sample[0] === 0xce || sample[0] === 0xcf) &&
+          sample[1] === 0xfa &&
+          sample[2] === 0xed &&
+          sample[3] === 0xfe))
+    ) {
+      return { kind: "program", label: "Java class / macOS program" };
+    }
+
+    // 4. ZIP archive (or Office file) - "PK\x03\x04"
+    if (
+      sample.length >= 4 &&
+      sample[0] === 0x50 &&
+      sample[1] === 0x4b &&
+      sample[2] === 0x03 &&
+      sample[3] === 0x04
+    ) {
+      return { kind: "archive", label: "ZIP archive (or Office file)" };
+    }
+
+    // 5. RAR / 7-Zip / gzip archive - "Rar!" / "7z\xBC\xAF" / 1F 8B
+    if (
+      (sample.length >= 4 &&
+        sample[0] === 0x52 &&
+        sample[1] === 0x61 &&
+        sample[2] === 0x72 &&
+        sample[3] === 0x21) ||
+      (sample.length >= 4 &&
+        sample[0] === 0x37 &&
+        sample[1] === 0x7a &&
+        sample[2] === 0xbc &&
+        sample[3] === 0xaf) ||
+      (sample.length >= 2 && sample[0] === 0x1f && sample[1] === 0x8b)
+    ) {
+      return { kind: "archive", label: "RAR / 7-Zip / gzip archive" };
+    }
+
+    // 6. PDF document - "%PDF-"
+    if (sample.length >= 5 && sample.subarray(0, 5).toString("latin1") === "%PDF-") {
+      return { kind: "document", label: "PDF document" };
+    }
+
+    // 7. Another image - PNG signature, FF D8 FF, or "GIF8"
+    if (
+      (sample.length >= 8 && startsWith(sample, PNG_SIGNATURE)) ||
+      (sample.length >= 3 && sample[0] === 0xff && sample[1] === 0xd8 && sample[2] === 0xff) ||
+      (sample.length >= 4 && sample.subarray(0, 4).toString("latin1") === "GIF8")
+    ) {
+      return { kind: "image", label: "another image" };
+    }
+
+    // 8. Script - "#!"
+    if (sample.length >= 2 && sample[0] === 0x23 && sample[1] === 0x21) {
+      return { kind: "script", label: "script" };
+    }
+
+    // 9. Mostly text (>= 90% printable ASCII or \n \r \t)
+    let textBytes = 0;
+    for (let i = 0; i < sample.length; i++) {
+      const b = sample[i];
+      if ((b >= 0x20 && b <= 0x7e) || b === 0x0a || b === 0x0d || b === 0x09) {
+        textBytes++;
+      }
+    }
+    if (sample.length > 0 && textBytes / sample.length >= 0.9) {
+      const text = sample.toString("latin1").toLowerCase();
+      if (
+        text.includes("<script") ||
+        text.includes("<?php") ||
+        text.includes("<html") ||
+        text.includes("<svg") ||
+        text.includes("<%")
+      ) {
+        return { kind: "script", label: "script / web code" };
+      }
+      return { kind: "text", label: "plain text" };
+    }
+
+    // 10. Anything else
+    return { kind: "binary", label: "unknown binary data" };
+  } catch {
+    return { kind: "binary", label: "unknown binary data" };
+  }
+}
+
+export function formatPreview(trailingBytes, maxLen = 64) {
+  try {
+    if (!trailingBytes || !Buffer.isBuffer(trailingBytes) || trailingBytes.length === 0) {
+      return "";
+    }
+    const slice = trailingBytes.subarray(0, maxLen);
+    let preview = "";
+    for (let i = 0; i < slice.length; i++) {
+      const b = slice[i];
+      if (b === 0x3c) {
+        preview += "&lt;";
+      } else if (b === 0x3e) {
+        preview += "&gt;";
+      } else if (b === 0x26) {
+        preview += "&amp;";
+      } else if (b === 0x22) {
+        preview += "&quot;";
+      } else if (b >= 0x20 && b <= 0x7e) {
+        preview += String.fromCharCode(b);
+      } else if (b === 0x0a) {
+        preview += "\\n";
+      } else if (b === 0x0d) {
+        preview += "\\r";
+      } else if (b === 0x09) {
+        preview += "\\t";
+      } else {
+        preview += ".";
+      }
+    }
+    if (trailingBytes.length > maxLen) {
+      preview += "...";
+    }
+    return preview;
+  } catch {
+    return "";
+  }
+}
+
 function detectTrailingPayload(buffer, detectedMimeType, findings, tolerance = TRAILING_PAYLOAD_TOLERANCE) {
   let endOffset;
   if (startsWith(buffer, PNG_SIGNATURE)) {
@@ -334,16 +490,35 @@ function detectTrailingPayload(buffer, detectedMimeType, findings, tolerance = T
     return;
   }
 
+  const trailingBytes = buffer.length - endOffset;
+  let severity = "medium";
+  let message = "Excessive data follows the file's canonical format terminator.";
+  const details = {
+    detectedMimeType,
+    endOffset,
+    trailingBytes,
+    toleranceBytes: tolerance,
+  };
+
+  try {
+    const trailingSlice = buffer.subarray(endOffset);
+    const { kind, label } = classifyHiddenData(trailingSlice);
+    const preview = formatPreview(trailingSlice);
+
+    severity = kind === "program" || kind === "archive" || kind === "script" ? "high" : "medium";
+    message = `Hidden data found after the end of the file (${trailingBytes} bytes, ${label}): "${preview}"`;
+    details.hiddenType = kind;
+    details.hiddenLabel = label;
+  } catch {
+    severity = "medium";
+    message = "Excessive data follows the file's canonical format terminator.";
+  }
+
   findings.push({
     rule: "polyglot-trailing-payload",
-    severity: "medium",
-    message: "Excessive data follows the file's canonical format terminator.",
-    details: {
-      detectedMimeType,
-      endOffset,
-      trailingBytes: buffer.length - endOffset,
-      toleranceBytes: tolerance,
-    },
+    severity,
+    message,
+    details,
   });
 }
 
