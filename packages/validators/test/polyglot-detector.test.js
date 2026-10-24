@@ -343,7 +343,7 @@ describe("PolyglotDetectorValidator — Full Enterprise Suite", () => {
       }
     });
 
-    test("valid JPEG with 34 trailing bytes after the end marker produces polyglot-trailing-payload finding", async () => {
+    test("valid JPEG with 34 trailing bytes after the end marker produces polyglot-trailing-payload finding (plain text)", async () => {
       const buffer = Buffer.concat([jpegBuffer(), Buffer.from("HUCC{extra_bytes_after_the_image}\n")]);
       expect(buffer.length - (buffer.lastIndexOf(Buffer.from([0xff, 0xd9])) + 2)).toBe(34);
       const findings = await PolyglotDetectorValidator.validate(buffer);
@@ -352,6 +352,54 @@ describe("PolyglotDetectorValidator — Full Enterprise Suite", () => {
       expect(hit.severity).toBe("medium");
       expect(hit.details.trailingBytes).toBe(34);
       expect(hit.details.toleranceBytes).toBe(8);
+      expect(hit.details.hiddenType).toBe("text");
+      expect(hit.details.hiddenLabel).toBe("plain text");
+      expect(hit.message).toContain("plain text");
+    });
+
+    test("trailing data starting with MZ produces kind program with high severity", async () => {
+      const buffer = Buffer.concat([jpegBuffer(), Buffer.from("MZ"), Buffer.alloc(16, 0x90)]);
+      const findings = await PolyglotDetectorValidator.validate(buffer);
+      const hit = findings.find((f) => f.rule === "polyglot-trailing-payload");
+      expect(hit).toBeDefined();
+      expect(hit.severity).toBe("high");
+      expect(hit.details.hiddenType).toBe("program");
+      expect(hit.details.hiddenLabel).toBe("Windows program (EXE/DLL)");
+      expect(hit.message).toContain("Windows program (EXE/DLL)");
+    });
+
+    test("trailing data starting with PK\\x03\\x04 produces kind archive with high severity", async () => {
+      const buffer = Buffer.concat([jpegBuffer(), Buffer.from([0x50, 0x4b, 0x03, 0x04]), Buffer.alloc(16, 0x00)]);
+      const findings = await PolyglotDetectorValidator.validate(buffer);
+      const hit = findings.find((f) => f.rule === "polyglot-trailing-payload");
+      expect(hit).toBeDefined();
+      expect(hit.severity).toBe("high");
+      expect(hit.details.hiddenType).toBe("archive");
+      expect(hit.details.hiddenLabel).toBe("ZIP archive (or Office file)");
+      expect(hit.message).toContain("ZIP archive (or Office file)");
+    });
+
+    test("trailing <script>alert(1)</script> produces kind script with high severity and safe preview without < or >", async () => {
+      const buffer = Buffer.concat([jpegBuffer(), Buffer.from("<script>alert(1)</script>")]);
+      const findings = await PolyglotDetectorValidator.validate(buffer);
+      const hit = findings.find((f) => f.rule === "polyglot-trailing-payload");
+      expect(hit).toBeDefined();
+      expect(hit.severity).toBe("high");
+      expect(hit.details.hiddenType).toBe("script");
+      expect(hit.details.hiddenLabel).toBe("script / web code");
+      expect(hit.message).not.toContain("<");
+      expect(hit.message).not.toContain(">");
+    });
+
+    test("trailing random non-text binary bytes produces kind binary with medium severity", async () => {
+      const buffer = Buffer.concat([jpegBuffer(), Buffer.from([0x00, 0x01, 0x02, 0x03, 0x80, 0x81, 0x82, 0xff, 0xaa, 0xbb])]);
+      const findings = await PolyglotDetectorValidator.validate(buffer);
+      const hit = findings.find((f) => f.rule === "polyglot-trailing-payload");
+      expect(hit).toBeDefined();
+      expect(hit.severity).toBe("medium");
+      expect(hit.details.hiddenType).toBe("binary");
+      expect(hit.details.hiddenLabel).toBe("unknown binary data");
+      expect(hit.message).toContain("unknown binary data");
     });
 
     test("valid JPEG with 2 trailing bytes (e.g. CRLF) does not produce polyglot-trailing-payload finding", async () => {
