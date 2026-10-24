@@ -43,7 +43,10 @@ import { fileTypeFromBuffer } from "file-type";
 const DEFAULT_MAX_BUFFER_SIZE_TO_CHECK = 5 * 1024 * 1024;
 const MIN_NON_WHITESPACE_LENGTH = 10;
 const METADATA_REGION_SIZE = 64 * 1024;
-const TRAILING_PAYLOAD_TOLERANCE = 64;
+// Maximum trailing bytes allowed beyond a file's canonical end marker before
+// flagging. Small trailing padding or newline characters (e.g. \r\n) are normal,
+// but anything larger (> 8 bytes) is suspicious and held for review.
+const TRAILING_PAYLOAD_TOLERANCE = 8;
 const MAX_TOKENS_TO_SCAN = 10000;
 
 // Magic byte signatures
