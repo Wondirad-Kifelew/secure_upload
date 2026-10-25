@@ -1,4 +1,4 @@
-# SecureUpload
+<img width="397" height="404" alt="image" src="https://github.com/user-attachments/assets/b732a109-1c18-4aba-9f13-f2bb24570d36" /># SecureUpload
 
 ## Group Members
 
@@ -13,7 +13,9 @@
 
 ## Video Walkthrough
 
-[Watch the project walkthrough](docs/secure_upload_walkthrough.mp4)
+[Watch the project walkthrough on YouTube](https://youtu.be/Fgevl1i8rBM)
+
+[Download the video (mp4)](docs/secure_upload_walkthrough.mp4)
 
 An open-source, self-hostable pipeline that checks untrusted file uploads **before** they reach your app.
 Send a file over HTTP; get back a verdict and, when it is safe, a **cleaned copy** of the file.
