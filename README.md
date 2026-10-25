@@ -1,5 +1,20 @@
 # SecureUpload
 
+## Group Members
+
+| Name | Student ID |
+|---|---|
+| Wondirad Abebe | CTC-3999-26 |
+| Bisrat Mengesha | CTC-581-26 |
+| Robel Bayelign | CTC-1448-26 |
+| Daniel Tumay | CTC-132-26 |
+| Yitbarek Mengistu | CTC-662-26 |
+| Betselot Melaku | CTC-3772-26 |
+
+## Video Walkthrough
+
+[Watch the project walkthrough](docs/secure_upload_walkthrough.mp4)
+
 An open-source, self-hostable pipeline that checks untrusted file uploads **before** they reach your app.
 Send a file over HTTP; get back a verdict and, when it is safe, a **cleaned copy** of the file.
 Works from any language — it is just a `POST` request.
