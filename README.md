@@ -1,4 +1,4 @@
-<img width="397" height="404" alt="image" src="https://github.com/user-attachments/assets/b732a109-1c18-4aba-9f13-f2bb24570d36" /># SecureUpload
+# SecureUpload
 
 ## Group Members
 
