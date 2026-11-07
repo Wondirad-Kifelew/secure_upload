@@ -28,7 +28,7 @@ COPY packages/risk-engine/package.json packages/risk-engine/package.json
 COPY packages/ai/package.json packages/ai/package.json
 COPY packages/service/package.json packages/service/package.json
 
-RUN npm install --omit=dev --no-audit --no-fund
+RUN npm ci --omit=dev --no-audit --no-fund
 
 # Now bring in the actual source.
 COPY packages ./packages

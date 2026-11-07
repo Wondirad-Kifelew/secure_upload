@@ -54,6 +54,18 @@ The service then listens on `http://localhost:3000`.
 
 Check it is up: `curl localhost:3000/health` → `{"status":"ok"}`
 
+In Windows PowerShell, generate the `.env` key and start Compose with:
+
+```powershell
+$rng = [Security.Cryptography.RandomNumberGenerator]::Create()
+$bytes = New-Object byte[] 16
+$rng.GetBytes($bytes)
+$key = [BitConverter]::ToString($bytes).Replace("-", "").ToLowerInvariant()
+Set-Content -NoNewline -Encoding ascii .env "API_KEY=$key"
+$rng.Dispose()
+docker compose up --build
+```
+
 ## Using it
 
 ### `POST /clean` — send a file, get the cleaned file back
@@ -159,8 +171,17 @@ Without `DEV_MODE=true`, the service refuses to start unless `API_KEY` and ClamA
 Requires Node.js 22+.
 
 ```bash
-npm install
+npm ci
 DEV_MODE=true API_KEY=test PORT=3001 node packages/service/src/http-server.js
+```
+
+In Windows PowerShell, set the development environment first:
+
+```powershell
+$env:DEV_MODE = "true"
+$env:API_KEY = "test"
+$env:PORT = "3001"
+node packages/service/src/http-server.js
 ```
 
 In `DEV_MODE` with no ClamAV configured, a fake scanner is used and **no antivirus scanning happens**.

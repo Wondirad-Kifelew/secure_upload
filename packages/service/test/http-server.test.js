@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { QuarantineStore } from "@secureupload/quarantine";
 
 const settings = ["MAX_UPLOAD_MB", "MAX_CONCURRENT_SCANS"];
@@ -60,6 +61,15 @@ describe("HTTP server", () => {
       if (originalSettings[name] === undefined) delete process.env[name];
       else process.env[name] = originalSettings[name];
     }
+  });
+
+  test("detects direct execution from platform-native paths", async () => {
+    const { isDirectExecution } = await importHttpServer();
+    const entryPath = path.join(os.tmpdir(), "secure upload", "http-server.js");
+
+    expect(isDirectExecution(pathToFileURL(entryPath).href, entryPath)).toBe(true);
+    expect(isDirectExecution("file:///different/http-server.js", entryPath)).toBe(false);
+    expect(isDirectExecution("file:///http-server.js", undefined)).toBe(false);
   });
 
   test.each(settings.flatMap((name) => [
