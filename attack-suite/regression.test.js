@@ -1,6 +1,7 @@
 // attack-suite/regression.test.js
-import { describe, test, expect } from "@jest/globals";
-import { readFile, readdir } from "node:fs/promises";
+import { describe, test, expect, beforeAll, afterAll } from "@jest/globals";
+import fs, { readFile, readdir } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { UploadSecurityService } from "@secureupload/service";
@@ -41,18 +42,33 @@ const scanners = usingRealClamAV
   ? [createClamAVScanner({ host: process.env.CLAMD_HOST, port: Number(process.env.CLAMD_PORT) })]
   : [FakeScanner];
 
-const service = new UploadSecurityService({
-  validators: [
-    MagicByteValidator, FilenameSanitizerValidator, MimeMismatchValidator,
-    PolyglotDetectorValidator, ZipBombGuardValidator, ZipSlipGuardValidator,
-    EntryCountGuardValidator, DuplicateEntryGuardValidator, NestedArchiveGuardValidator,
-    SymlinkEntryGuardValidator, EncryptedEntryGuardValidator, NonRecursiveBombGuardValidator,
-    DeviceNameGuardValidator, UnicodeControlGuardValidator, TrailingCharacterGuardValidator,
-    ArchiveIntegrityGuardValidator, DangerousExtensionGuardValidator, NestedZipInspectorValidator,
-  ],
-  scanners,
-  quarantineStore: new QuarantineStore({ rootDirectory: path.join(__dirname, ".test-quarantine") }),
-  sandboxManager: new SandboxManager({ adapter: new DryRunSandboxAdapter(), threshold: 60 }),
+let quarantineRoot;
+let service;
+
+beforeAll(async () => {
+  // Use a fresh temp directory rather than a fixed path inside the repo.
+  // A leftover .test-quarantine directory can be owned by another user
+  // (e.g. root after a containerized test run), making chmod fail with EPERM.
+  quarantineRoot = await fs.mkdtemp(path.join(os.tmpdir(), "secureupload-attack-suite-"));
+  service = new UploadSecurityService({
+    validators: [
+      MagicByteValidator, FilenameSanitizerValidator, MimeMismatchValidator,
+      PolyglotDetectorValidator, ZipBombGuardValidator, ZipSlipGuardValidator,
+      EntryCountGuardValidator, DuplicateEntryGuardValidator, NestedArchiveGuardValidator,
+      SymlinkEntryGuardValidator, EncryptedEntryGuardValidator, NonRecursiveBombGuardValidator,
+      DeviceNameGuardValidator, UnicodeControlGuardValidator, TrailingCharacterGuardValidator,
+      ArchiveIntegrityGuardValidator, DangerousExtensionGuardValidator, NestedZipInspectorValidator,
+    ],
+    scanners,
+    quarantineStore: new QuarantineStore({ rootDirectory: quarantineRoot }),
+    sandboxManager: new SandboxManager({ adapter: new DryRunSandboxAdapter(), threshold: 60 }),
+  });
+});
+
+afterAll(async () => {
+  if (quarantineRoot) {
+    await fs.rm(quarantineRoot, { recursive: true, force: true });
+  }
 });
 
 async function listSamplesRecursive(dir) {
