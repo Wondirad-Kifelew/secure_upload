@@ -48,17 +48,46 @@ export function extractFeatures({ buffer, findings = [], filename = "" } = {}) {
   const highCount = countSeverity(findings, "high");
   const extremeCount = countSeverity(findings, "extreme");
 
-  const macroDetected = hasRule(findings, ["macro-detected", "macro"]);
-  const embeddedObjectDetected = hasRule(findings, ["embedded-object-detected", "embedded-object"]);
-  const scriptDetected = hasRule(findings, ["script-detected", "script"]);
-  const suspiciousExecutable = hasRule(findings, ["suspicious-executable", "executable-detected"]);
+  const macroDetected = hasRule(findings, ["macro-detected", "macro", "ooxml-macro-removed"]);
+  const embeddedObjectDetected = hasRule(findings, [
+    "embedded-object-detected",
+    "embedded-object",
+    "ooxml-embedded-object-removed",
+    "ooxml-activex-removed",
+  ]);
+  const scriptDetected = hasRule(findings, [
+    "script-detected",
+    "script",
+    "polyglot-embedded-script",
+    "polyglot-dual-format",
+  ]);
+  const suspiciousExecutable = hasRule(findings, [
+    "suspicious-executable",
+    "executable-detected",
+    "zip-executable-content",
+    "zip-extracted-dangerous-extension",
+    "polyglot-secondary-container",
+  ]);
   const typeMismatch = hasRule(findings, [
     "mime-mismatch",
     "magic-byte-mismatch",
     "extension-mismatch",
+    "extension-declared-mismatch",
+    "extension-content-mismatch",
     "type-mismatch",
   ]);
-  const zipBombSignal = hasRule(findings, ["zip-bomb", "zip-bomb-suspected", "archive-expansion"]);
+  const zipBombSignal = hasRule(findings, [
+    "zip-bomb",
+    "zip-bomb-suspected",
+    "archive-expansion",
+    "zip-bomb-compression-ratio",
+    "zip-bomb-total-size",
+    "zip-non-recursive-bomb-shared-offset",
+    "zip-non-recursive-bomb-overlapping-range",
+    "zip-nested-total-size-exceeded",
+    "zip-nested-depth-exceeded",
+    "zip-nested-entry-too-large",
+  ]);
 
   const lowerName = String(filename).toLowerCase();
   const filenameRisk = /(^|[.\\/])\.\.?($|[.\\/])/.test(lowerName)

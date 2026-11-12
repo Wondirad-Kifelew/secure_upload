@@ -50,6 +50,31 @@ describe("ScanPipeline", () => {
     expect(context.findings[0].severity).toBe("high");
   });
 
+  test("continues with later scanners when an earlier scanner throws", async () => {
+    const brokenScanner = {
+      name: "Broken Scanner",
+      async scan() {
+        throw new Error("clamd unreachable");
+      },
+    };
+    const workingScanner = createFakeScanner({
+      clean: false,
+      findings: [{ rule: "yara-match", severity: "high", message: "matched" }],
+    });
+    const pipeline = new ScanPipeline([brokenScanner, workingScanner]);
+    const context = new PipelineContext();
+
+    await pipeline.run(Buffer.alloc(0), context);
+
+    expect(context.findings.some((f) => f.rule === "scanner-failed")).toBe(true);
+    expect(context.findings.some((f) => f.rule === "yara-match")).toBe(true);
+
+    const failure = context.findings.find((f) => f.rule === "scanner-failed");
+    expect(failure.severity).toBe("medium");
+    expect(failure.source).toBe("Broken Scanner");
+    expect(failure.details.reason).toBe("clamd unreachable");
+  });
+
   test("aggregates findings from multiple scanners", async () => {
     const scannerA = createFakeScanner({
       clean: false,

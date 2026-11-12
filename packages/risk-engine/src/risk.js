@@ -38,7 +38,7 @@ function dynamicFlags(dynamic) {
   };
 }
 
-export function calculateRisk({ features = {}, anomaly = null, findings = [], sandbox = null } = {}) {
+export function calculateRisk({ features = {}, anomaly = null, findings = [], sandbox = null, riskOverride = null } = {}) {
   let score = 0;
   const reasons = [];
   const contributions = [];
@@ -90,6 +90,26 @@ export function calculateRisk({ features = {}, anomaly = null, findings = [], sa
     add(flags.createdExecutable, WEIGHTS.createdExecutable, "Sandbox observed executable file creation");
     add(flags.suspiciousChildProcess, WEIGHTS.suspiciousChildProcess, "Sandbox observed a suspicious child process");
     add(flags.outboundNetwork, WEIGHTS.outboundNetwork, "Sandbox observed outbound network activity");
+  }
+
+  // A caller-provided score (e.g. from an upstream scanner) acts as a floor,
+  // never a ceiling: it can raise the computed risk, but it cannot talk the
+  // engine down from evidence it already observed.
+  const computed = clamp(score);
+  if (Number.isFinite(riskOverride)) {
+    const override = clamp(riskOverride);
+    if (override > computed) {
+      contributions.push({
+        signal: "Caller-provided risk score",
+        points: Number((override - computed).toFixed(2)),
+      });
+      reasons.push("Caller-provided risk score exceeded the computed score");
+      score = override;
+    } else {
+      score = computed;
+    }
+  } else {
+    score = computed;
   }
 
   return {
