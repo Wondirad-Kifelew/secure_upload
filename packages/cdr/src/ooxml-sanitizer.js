@@ -77,32 +77,90 @@ import yazl from "yazl";
  * { buffer, findings } — see core/src/interfaces/sanitizer.js.
  */
 
+const DEFAULT_MAX_ENTRY_BYTES = 50 * 1024 * 1024; // 50 MB
+const DEFAULT_MAX_TOTAL_BYTES = 250 * 1024 * 1024; // 250 MB
+
 const VBA_PROJECT_PATTERN = /(^|\/)vbaProject(Signature)?\.bin$/i;
 const EMBEDDINGS_PATTERN = /(^|\/)embeddings\//i;
 const ACTIVEX_PATTERN = /(^|\/)activeX\//i;
 const RELS_PATH_PATTERN = /(^|\/)_rels\/[^/]+\.rels$/i;
 
+// Relationship types that must be removed even when their target is external.
 const DANGEROUS_EXTERNAL_RELATIONSHIP_TYPE_SUFFIXES = [
   "/attachedTemplate",
   "/oleObject",
   "/package",
 ];
 
+// Relationship types whose target part is dangerous regardless of where the
+// part lives in the package. The path-based checks above catch the common
+// layouts, but a crafted file can place a macro/OLE/ActiveX part elsewhere
+// (e.g. word/media/) and reference it by relationship type.
+const DANGEROUS_INTERNAL_RELATIONSHIP_TYPE_SUFFIXES = [
+  "/vbaProject",
+  "/oleObject",
+  "/package",
+  "/control",
+  "/activeXControl",
+];
+
+const RELATIONSHIP_TAG_PATTERN =
+  /<(?:(?:\w+):)?Relationship\b[^>]*(?:\/>|>[\s\S]*?<\/(?:(?:\w+):)?Relationship\s*>)/gi;
+
+function normalizeEntryPath(fileName) {
+  return fileName.replace(/\\/g, "/");
+}
+
 function isRemovedPart(fileName) {
+  const normalized = normalizeEntryPath(fileName);
   return (
-    VBA_PROJECT_PATTERN.test(fileName) ||
-    EMBEDDINGS_PATTERN.test(fileName) ||
-    ACTIVEX_PATTERN.test(fileName)
+    VBA_PROJECT_PATTERN.test(normalized) ||
+    EMBEDDINGS_PATTERN.test(normalized) ||
+    ACTIVEX_PATTERN.test(normalized)
   );
+}
+
+/** Read one XML attribute, accepting either single or double quotes. */
+function getXmlAttribute(tag, name) {
+  const pattern = new RegExp(`\\b${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)')`, "i");
+  const match = tag.match(pattern);
+  return match ? match[1] ?? match[2] ?? null : null;
+}
+
+function decodeXmlValue(value) {
+  return value
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&apos;/gi, "'")
+    .replace(/&#x([0-9a-f]+);/gi, (_, hex) => String.fromCodePoint(parseInt(hex, 16)))
+    .replace(/&#(\d+);/g, (_, dec) => String.fromCodePoint(Number(dec)));
+}
+
+function decodeTarget(target) {
+  const decodedXml = decodeXmlValue(target);
+  try {
+    return decodeURIComponent(decodedXml);
+  } catch {
+    return decodedXml;
+  }
+}
+
+function relationshipTypeMatches(type, suffixes) {
+  const lowerType = type.trim().toLowerCase();
+  return suffixes.some((suffix) => lowerType.endsWith(suffix.toLowerCase()));
 }
 
 /** Resolve a Relationship's Target against the folder its .rels file describes. */
 function resolveRelationshipTarget(relsPath, target) {
-  if (target.startsWith("/")) {
-    return target.slice(1);
+  const normalizedRelsPath = normalizeEntryPath(relsPath);
+  const normalizedTarget = normalizeEntryPath(decodeTarget(target).split("#")[0]);
+  if (normalizedTarget.startsWith("/")) {
+    return normalizedTarget.slice(1);
   }
-  const partsDir = relsPath.replace(/\/_rels\/[^/]+\.rels$/i, "");
-  const combined = partsDir ? `${partsDir}/${target}` : target;
+  const partsDir = normalizedRelsPath.replace(/\/_rels\/[^/]+\.rels$/i, "");
+  const combined = partsDir ? `${partsDir}/${normalizedTarget}` : normalizedTarget;
   const segments = [];
   for (const segment of combined.split("/")) {
     if (segment === "" || segment === ".") continue;
@@ -112,34 +170,83 @@ function resolveRelationshipTarget(relsPath, target) {
   return segments.join("/");
 }
 
-function readZipEntries(buffer) {
+function readZipEntries(buffer, { maxEntryBytes, maxTotalBytes }) {
   return new Promise((resolve, reject) => {
-    yauzl.fromBuffer(buffer, { lazyEntries: true }, (err, zipfile) => {
-      if (err) return reject(err);
-      const entries = [];
-      zipfile.readEntry();
-      zipfile.on("entry", (entry) => {
-        if (/\/$/.test(entry.fileName)) {
-          // Directory entry — no content to read, just record it so the
-          // rebuilt archive preserves empty-folder entries if present.
-          entries.push({ fileName: entry.fileName, isDirectory: true });
-          zipfile.readEntry();
-          return;
-        }
-        zipfile.openReadStream(entry, (streamErr, readStream) => {
-          if (streamErr) return reject(streamErr);
-          const chunks = [];
-          readStream.on("data", (chunk) => chunks.push(chunk));
-          readStream.on("end", () => {
-            entries.push({ fileName: entry.fileName, isDirectory: false, data: Buffer.concat(chunks) });
-            zipfile.readEntry();
-          });
-          readStream.on("error", (e) => reject(e));
+    yauzl.fromBuffer(
+      buffer,
+      { lazyEntries: true, decodeStrings: false, validateEntrySizes: false },
+      (err, zipfile) => {
+        if (err) return reject(err);
+
+        const entries = [];
+        let totalBytes = 0;
+        let settled = false;
+
+        const fail = (error) => {
+          if (settled) return;
+          settled = true;
+          try {
+            zipfile.close();
+          } catch {
+            // The archive may already be closed; the original error is what matters.
+          }
+          reject(error);
+        };
+
+        zipfile.on("error", fail);
+        zipfile.on("end", () => {
+          if (settled) return;
+          settled = true;
+          resolve(entries);
         });
-      });
-      zipfile.on("end", () => resolve(entries));
-      zipfile.on("error", (e) => reject(e));
-    });
+        zipfile.on("entry", (entry) => {
+          const fileName = entry.fileName.toString("utf8");
+          if (/\/$/.test(fileName)) {
+            // Directory entry — no content to read, just record it so the
+            // rebuilt archive preserves empty-folder entries if present.
+            entries.push({ fileName, isDirectory: true });
+            zipfile.readEntry();
+            return;
+          }
+          zipfile.openReadStream(entry, (streamErr, readStream) => {
+            if (streamErr) return fail(streamErr);
+
+            const chunks = [];
+            let entryBytes = 0;
+            readStream.on("data", (chunk) => {
+              entryBytes += chunk.length;
+              if (entryBytes > maxEntryBytes) {
+                readStream.destroy();
+                fail(
+                  new Error(
+                    `OOXML part "${fileName}" exceeds the ${maxEntryBytes}-byte extraction limit.`
+                  )
+                );
+                return;
+              }
+              chunks.push(chunk);
+            });
+            readStream.on("end", () => {
+              if (settled) return;
+              totalBytes += entryBytes;
+              if (totalBytes > maxTotalBytes) {
+                fail(
+                  new Error(
+                    `OOXML package exceeds the ${maxTotalBytes}-byte total extraction limit.`
+                  )
+                );
+                return;
+              }
+              entries.push({ fileName, isDirectory: false, data: Buffer.concat(chunks) });
+              zipfile.readEntry();
+            });
+            readStream.on("error", fail);
+          });
+        });
+
+        zipfile.readEntry();
+      }
+    );
   });
 }
 
@@ -161,26 +268,48 @@ function buildZip(entries) {
   });
 }
 
+/**
+ * Find internal relationship targets whose relationship TYPE is dangerous.
+ * These parts are removed even if they are not in an embeddings/ or activeX/
+ * folder, and their relationship entries are dropped as dangling references.
+ */
+function collectDangerousRelationshipTargets(entries) {
+  const targets = new Set();
+  for (const entry of entries) {
+    if (entry.isDirectory || !RELS_PATH_PATTERN.test(normalizeEntryPath(entry.fileName))) continue;
+    const xmlText = entry.data.toString("utf8");
+    for (const match of xmlText.matchAll(RELATIONSHIP_TAG_PATTERN)) {
+      const tag = match[0];
+      const type = getXmlAttribute(tag, "Type") ?? "";
+      const target = getXmlAttribute(tag, "Target") ?? "";
+      const targetMode = getXmlAttribute(tag, "TargetMode") ?? "Internal";
+      if (targetMode.toLowerCase() === "external") continue;
+      if (!relationshipTypeMatches(type, DANGEROUS_INTERNAL_RELATIONSHIP_TYPE_SUFFIXES)) continue;
+      targets.add(resolveRelationshipTarget(entry.fileName, target));
+    }
+  }
+  return targets;
+}
+
 /** Strip dangling/dangerous <Relationship> elements from one .rels file's XML text. */
 function cleanRelationshipsXml(relsPath, xmlText, removedPartPaths) {
   let removedCount = 0;
-  const cleaned = xmlText.replace(/<Relationship\b[^>]*\/>/g, (tag) => {
-    const typeMatch = tag.match(/\bType="([^"]*)"/);
-    const targetMatch = tag.match(/\bTarget="([^"]*)"/);
-    const targetModeMatch = tag.match(/\bTargetMode="([^"]*)"/);
-    const type = typeMatch?.[1] ?? "";
-    const target = targetMatch?.[1] ?? "";
-    const targetMode = targetModeMatch?.[1] ?? "Internal";
+  const cleaned = xmlText.replace(RELATIONSHIP_TAG_PATTERN, (tag) => {
+    const type = getXmlAttribute(tag, "Type") ?? "";
+    const target = getXmlAttribute(tag, "Target") ?? "";
+    const targetMode = getXmlAttribute(tag, "TargetMode") ?? "Internal";
+    const isExternal = targetMode.toLowerCase() === "external";
 
     const pointsAtRemovedPart =
-      targetMode !== "External" &&
-      removedPartPaths.has(resolveRelationshipTarget(relsPath, target));
+      !isExternal && removedPartPaths.has(resolveRelationshipTarget(relsPath, target));
+
+    const isDangerousInternal =
+      !isExternal && relationshipTypeMatches(type, DANGEROUS_INTERNAL_RELATIONSHIP_TYPE_SUFFIXES);
 
     const isDangerousExternal =
-      targetMode === "External" &&
-      DANGEROUS_EXTERNAL_RELATIONSHIP_TYPE_SUFFIXES.some((suffix) => type.endsWith(suffix));
+      isExternal && relationshipTypeMatches(type, DANGEROUS_EXTERNAL_RELATIONSHIP_TYPE_SUFFIXES);
 
-    if (pointsAtRemovedPart || isDangerousExternal) {
+    if (pointsAtRemovedPart || isDangerousInternal || isDangerousExternal) {
       removedCount += 1;
       return "";
     }
@@ -189,29 +318,40 @@ function cleanRelationshipsXml(relsPath, xmlText, removedPartPaths) {
   return { cleaned, removedCount };
 }
 
-export function createOoxmlSanitizer() {
+export function createOoxmlSanitizer({
+  maxEntryBytes = DEFAULT_MAX_ENTRY_BYTES,
+  maxTotalBytes = DEFAULT_MAX_TOTAL_BYTES,
+} = {}) {
   return {
     name: "OOXML Sanitizer",
 
     async sanitize(buffer) {
       let entries;
       try {
-        entries = await readZipEntries(buffer);
+        entries = await readZipEntries(buffer, { maxEntryBytes, maxTotalBytes });
       } catch (err) {
         throw new Error(`Could not read this file as an OOXML (zip) package: ${err.message}`);
       }
 
       const removedPartPaths = new Set(
-        entries.filter((e) => !e.isDirectory && isRemovedPart(e.fileName)).map((e) => e.fileName)
+        entries.filter((e) => !e.isDirectory && isRemovedPart(e.fileName)).map((e) => normalizeEntryPath(e.fileName))
       );
+
+      // Parts referenced by a dangerous relationship type are just as unsafe
+      // as the conventional embeddings/ and activeX/ folders.
+      for (const target of collectDangerousRelationshipTargets(entries)) {
+        removedPartPaths.add(target);
+      }
 
       let macroCount = 0;
       let embeddingCount = 0;
       let activeXCount = 0;
       for (const path of removedPartPaths) {
         if (VBA_PROJECT_PATTERN.test(path)) macroCount += 1;
-        else if (EMBEDDINGS_PATTERN.test(path)) embeddingCount += 1;
-        else if (ACTIVEX_PATTERN.test(path)) activeXCount += 1;
+        else if (/^embeddings\//i.test(path)) embeddingCount += 1;
+        else if (/^activeX\//i.test(path)) activeXCount += 1;
+        else if (/\/oleObject|(^|\/)embeddings\//i.test(path)) embeddingCount += 1;
+        else if (/\/control$|activeX/i.test(path)) activeXCount += 1;
       }
 
       let externalRelationshipCount = 0;
@@ -221,12 +361,13 @@ export function createOoxmlSanitizer() {
           rebuiltEntries.push(entry);
           continue;
         }
-        if (removedPartPaths.has(entry.fileName)) {
+        const entryPath = normalizeEntryPath(entry.fileName);
+        if (removedPartPaths.has(entryPath)) {
           continue; // dropped: macro, embedded object, or ActiveX control
         }
-        if (RELS_PATH_PATTERN.test(entry.fileName)) {
+        if (RELS_PATH_PATTERN.test(entryPath)) {
           const xmlText = entry.data.toString("utf8");
-          const { cleaned, removedCount } = cleanRelationshipsXml(entry.fileName, xmlText, removedPartPaths);
+          const { cleaned, removedCount } = cleanRelationshipsXml(entryPath, xmlText, removedPartPaths);
           externalRelationshipCount += removedCount;
           rebuiltEntries.push({ ...entry, data: Buffer.from(cleaned, "utf8") });
           continue;
