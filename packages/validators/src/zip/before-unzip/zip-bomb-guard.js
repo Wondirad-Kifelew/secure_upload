@@ -65,7 +65,24 @@ export function createZipBombGuardValidator({
       for (const entry of entries) {
         totalUncompressed += entry.uncompressedSize;
 
-        if (entry.compressedSize > 0) {
+        // A claimed uncompressed size with zero compressed bytes is an
+        // infinite ratio. Treat it as a bomb signal instead of skipping the
+        // division (which would let these entries pass every ratio check).
+        if (entry.compressedSize === 0 && entry.uncompressedSize > 0) {
+          findings.push({
+            rule: "zip-bomb-compression-ratio",
+            severity: "extreme",
+            message:
+              `Archive entry "${entry.fileName}" claims ${entry.uncompressedSize} uncompressed ` +
+              `bytes from zero compressed bytes — an impossible, unbounded compression ratio.`,
+            details: {
+              fileName: entry.fileName,
+              compressedSize: entry.compressedSize,
+              uncompressedSize: entry.uncompressedSize,
+              ratio: Infinity,
+            },
+          });
+        } else if (entry.compressedSize > 0) {
           const ratio = entry.uncompressedSize / entry.compressedSize;
           if (ratio > maxCompressionRatio) {
             findings.push({

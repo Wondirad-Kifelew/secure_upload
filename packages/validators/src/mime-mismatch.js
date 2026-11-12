@@ -14,7 +14,7 @@ import { fileTypeFromBuffer } from "file-type";
  *   extension-content-mismatch   — the extension disagrees with what
  *     the file's content actually is (e.g. "invoice.pdf" that is
  *     really a PNG under the hood — a classic renamed-extension trick,
- *     including the "resume.php.jpg" doubsssssle-extension case, since only
+ *     including the "resume.php.jpg" double-extension case, since only
  *     the LAST extension is checked here, same as most real servers do)
  *
  * Deliberately NOT re-checking declared-vs-sniffed here — that's

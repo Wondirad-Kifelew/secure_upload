@@ -317,6 +317,57 @@ function pngEndOffset(buffer) {
   return undefined;
 }
 
+/**
+ * Walks the JPEG marker structure to find the first EOI that actually ends
+ * the image, rather than trusting `lastIndexOf(FFD9)`. Appended payloads
+ * can end with their own FFD9, which would otherwise move the "end" to the
+ * end of the file and hide the payload. Segment lengths are honoured so an
+ * FFD9 inside metadata (e.g. an EXIF thumbnail) is not mistaken for the end.
+ * Returns the offset just past EOI, or undefined if the structure is invalid.
+ */
+function jpegEndOffset(buffer) {
+  if (!startsWith(buffer, JPEG_SIGNATURE)) return undefined;
+
+  let offset = 2; // skip SOI (FF D8); offset now points at the first FF marker prefix
+  while (offset < buffer.length) {
+    if (buffer[offset] !== 0xff) {
+      // Entropy-coded scan data. Only FF is special; skip ahead to it.
+      const next = buffer.indexOf(0xff, offset);
+      if (next === -1) return undefined;
+      offset = next;
+      continue;
+    }
+
+    let markerOffset = offset;
+    while (markerOffset < buffer.length && buffer[markerOffset] === 0xff) markerOffset++;
+    if (markerOffset >= buffer.length) return undefined;
+    const marker = buffer[markerOffset];
+
+    // Stuffed byte (FF 00) or restart marker (FF D0-D7) inside scan data.
+    if (marker === 0x00 || (marker >= 0xd0 && marker <= 0xd7)) {
+      offset = markerOffset + 1;
+      continue;
+    }
+    if (marker === 0xd9) return markerOffset + 1; // EOI
+    if (marker === 0xd8 || marker === 0x01) {
+      // SOI / TEM are standalone markers.
+      offset = markerOffset + 1;
+      continue;
+    }
+
+    // Every other marker carries a 2-byte big-endian length that includes
+    // the length field itself but not the marker.
+    const lengthOffset = markerOffset + 1;
+    if (lengthOffset + 2 > buffer.length) return undefined;
+    const length = buffer.readUInt16BE(lengthOffset);
+    if (length < 2) return undefined;
+    const segmentEnd = lengthOffset + length;
+    if (segmentEnd > buffer.length) return undefined;
+    offset = segmentEnd;
+  }
+  return undefined;
+}
+
 export function classifyHiddenData(trailingBytes) {
   try {
     if (!trailingBytes || !Buffer.isBuffer(trailingBytes) || trailingBytes.length === 0) {
@@ -475,9 +526,16 @@ function detectTrailingPayload(buffer, detectedMimeType, findings, tolerance = T
   if (startsWith(buffer, PNG_SIGNATURE)) {
     endOffset = pngEndOffset(buffer);
   } else if (startsWith(buffer, JPEG_SIGNATURE)) {
-    const marker = buffer.lastIndexOf(JPEG_EOI);
-    if (marker !== -1) {
-      endOffset = marker + JPEG_EOI.length;
+    const parsed = jpegEndOffset(buffer);
+    if (parsed !== undefined) {
+      endOffset = parsed;
+    } else {
+      // Malformed marker structure: fall back to the FIRST EOI rather than
+      // the last one, so appended data cannot move the boundary to EOF.
+      const marker = buffer.indexOf(JPEG_EOI, 2);
+      if (marker !== -1) {
+        endOffset = marker + JPEG_EOI.length;
+      }
     }
   } else if (startsWith(buffer, PDF_SIGNATURE)) {
     const marker = buffer.lastIndexOf(PDF_EOF);

@@ -86,7 +86,14 @@ export const NonRecursiveBombGuardValidator = {
 
       // If current entry has compressed data that extends into the next entry's offset
       if (current.compressedSize > 0) {
-        const currentDataStart = current.relativeOffsetOfLocalHeader;
+        // Compressed data starts after the local file header (fixed 30-byte
+        // header + file name + extra field). Starting at the header offset
+        // alone underestimates the range and can miss real overlaps.
+        const currentDataStart =
+          current.relativeOffsetOfLocalHeader +
+          30 +
+          current.fileNameLength +
+          current.extraFieldLength;
         const currentDataEnd = currentDataStart + current.compressedSize;
 
         if (currentDataEnd > next.relativeOffsetOfLocalHeader) {
@@ -129,6 +136,8 @@ function readZipEntriesWithOffsets(buffer) {
           entries.push({
             fileName: entry.fileName.toString("utf8"),
             relativeOffsetOfLocalHeader: entry.relativeOffsetOfLocalHeader,
+            fileNameLength: entry.fileNameLength,
+            extraFieldLength: entry.extraFieldLength,
             compressedSize: entry.compressedSize,
             uncompressedSize: entry.uncompressedSize,
           });

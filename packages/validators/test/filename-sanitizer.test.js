@@ -76,6 +76,58 @@ describe("FilenameSanitizerValidator", () => {
     expect(findings.map((f) => f.rule)).toContain("filename-path-traversal");
   });
 
+  test("flags a percent-encoded absolute path", async () => {
+    const findings = await FilenameSanitizerValidator.validate(Buffer.alloc(0), {
+      filename: "%2fetc%2fpasswd",
+    });
+    const finding = findings.find((f) => f.rule === "filename-path-traversal");
+    expect(finding).toBeDefined();
+    expect(finding.details.detectionMethod).toBe("percent-encoded");
+  });
+
+  test("flags a Windows drive absolute path", async () => {
+    const findings = await FilenameSanitizerValidator.validate(Buffer.alloc(0), {
+      filename: "C:/Windows/win.ini",
+    });
+    const finding = findings.find((f) => f.rule === "filename-path-traversal");
+    expect(finding).toBeDefined();
+    expect(finding.details.detectionMethod).toBe("absolute-path");
+  });
+
+  test("flags a Windows drive backslash path", async () => {
+    const findings = await FilenameSanitizerValidator.validate(Buffer.alloc(0), {
+      filename: "C:\\Windows\\win.ini",
+    });
+    expect(findings.map((f) => f.rule)).toContain("filename-path-traversal");
+  });
+
+  test("flags a UNC path", async () => {
+    const findings = await FilenameSanitizerValidator.validate(Buffer.alloc(0), {
+      filename: "\\\\server\\share\\file.txt",
+    });
+    const finding = findings.find((f) => f.rule === "filename-path-traversal");
+    expect(finding).toBeDefined();
+    expect(finding.details.detectionMethod).toBe("absolute-path");
+  });
+
+  test("flags a bare .. filename", async () => {
+    const findings = await FilenameSanitizerValidator.validate(Buffer.alloc(0), {
+      filename: "..",
+    });
+    const finding = findings.find((f) => f.rule === "filename-path-traversal");
+    expect(finding).toBeDefined();
+    expect(finding.details.detectionMethod).toBe("dot-dot-segment");
+  });
+
+  test("flags a filename ending in a .. segment", async () => {
+    const findings = await FilenameSanitizerValidator.validate(Buffer.alloc(0), {
+      filename: "foo/..",
+    });
+    const finding = findings.find((f) => f.rule === "filename-path-traversal");
+    expect(finding).toBeDefined();
+    expect(finding.details.detectionMethod).toBe("dot-dot-segment");
+  });
+
   test("flags un-normalized Unicode (decomposed accent vs precomposed)", async () => {
     // "cafe" + combining acute accent (U+0301), instead of the single
     // precomposed "é" character. Visually identical, different bytes.

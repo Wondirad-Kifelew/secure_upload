@@ -17,7 +17,9 @@ export const ZipSlipGuardValidator = {
     }
     for (const fileName of entries) {
       const normalized = fileName.replace(/\\/g, "/");
-      const isTraversal = PATH_TRAVERSAL_PATTERN.test(normalized);
+      const isTraversal =
+        PATH_TRAVERSAL_PATTERN.test(normalized) ||
+        normalized.split("/").some((segment) => segment === "..");
       const isAbsolute = normalized.startsWith("/") || ABSOLUTE_DRIVE_PATTERN.test(normalized);
       if (isTraversal || isAbsolute) {
         findings.push({
@@ -46,13 +48,13 @@ function readZipEntryNames(buffer) {
     yauzl.fromBuffer(buffer, { lazyEntries: true, decodeStrings: false, validateEntrySizes: false }, (err, zipfile) => {
       if (err) return reject(err);
       const names = [];
-      zipfile.readEntry();
       zipfile.on("entry", (entry) => {
         names.push(entry.fileName.toString("utf8"));
         zipfile.readEntry();
       });
       zipfile.on("end", () => resolve(names));
       zipfile.on("error", (e) => reject(e));
+      zipfile.readEntry();
     });
   });
 }

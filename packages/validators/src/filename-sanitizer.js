@@ -54,6 +54,30 @@ const SLASH_LOOKALIKES = ["\u2215", "\u2044", "\uFF0F", "\uFF3C"];
  * string percent-decoded (up to twice, to catch double-encoding like
  * "%252e%252e%252f"). Returns which method caught it, or null.
  */
+function decodeFilename(filename) {
+  let decoded = filename;
+  for (let i = 0; i < 2; i++) {
+    let next;
+    try {
+      next = decodeURIComponent(decoded);
+    } catch {
+      break; // not valid percent-encoding — stop, don't guess
+    }
+    if (next === decoded) break; // nothing left to decode
+    decoded = next;
+  }
+  return decoded;
+}
+
+function isAbsolutePath(value) {
+  return (
+    value.startsWith("/") ||
+    value.startsWith("\\") ||
+    WINDOWS_DRIVE_PATTERN.test(value) ||
+    UNC_PATH_PATTERN.test(value)
+  );
+}
+
 function detectPathTraversal(filename) {
   const literal = traversalMethod(filename);
   if (literal) {
@@ -72,19 +96,9 @@ function detectPathTraversal(filename) {
     }
   }
 
-  let decoded = filename;
-  for (let i = 0; i < 2; i++) {
-    let next;
-    try {
-      next = decodeURIComponent(decoded);
-    } catch {
-      break; // not valid percent-encoding — stop, don't guess
-    }
-    if (next === decoded) break; // nothing left to decode
-    decoded = next;
-    if (traversalMethod(decoded)) {
-      return { method: "percent-encoded", decodedValue: decoded };
-    }
+  const decoded = decodeFilename(filename);
+  if (decoded !== filename && traversalMethod(decoded)) {
+    return { method: "percent-encoded", decodedValue: decoded };
   }
 
   return null;
@@ -119,21 +133,22 @@ export const FilenameSanitizerValidator = {
     }
 
     const traversal = detectPathTraversal(filename);
-    
-    if (
-      traversal ||
-      filename.startsWith("/") ||
-      filename.startsWith("\\") ||
-      WINDOWS_DRIVE_PATTERN.test(filename) ||
-      UNC_PATH_PATTERN.test(filename)
-    ) {
+    const decodedFilename = decodeFilename(filename);
+    const absolute = isAbsolutePath(filename) || isAbsolutePath(decodedFilename);
+
+    if (traversal || absolute) {
       findings.push({
         rule: "filename-path-traversal",
         severity: "extreme",
         message:
           "Filename contains a path traversal sequence or an absolute path, " +
           "which could write outside the intended upload directory.",
-        details: { filename, detectionMethod: traversal?.method ?? "absolute-path" },
+        details: {
+          filename,
+          detectionMethod:
+            traversal?.method ??
+            (decodedFilename !== filename ? "percent-encoded" : "absolute-path"),
+        },
       });
     }
 

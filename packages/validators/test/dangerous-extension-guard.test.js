@@ -38,6 +38,22 @@ describe("DangerousExtensionGuardValidator", () => {
     expect(psFindings).toHaveLength(1);
   });
 
+  test("flags a dangerous extension disguised with trailing dots", async () => {
+    const findings = await DangerousExtensionGuardValidator.validate(Buffer.from(""), {
+      filename: "virus.exe.",
+    });
+    expect(findings).toHaveLength(1);
+    expect(findings[0].rule).toBe("zip-extracted-dangerous-extension");
+  });
+
+  test("flags a dangerous extension disguised with trailing spaces", async () => {
+    const findings = await DangerousExtensionGuardValidator.validate(Buffer.from(""), {
+      filename: "virus.exe ",
+    });
+    expect(findings).toHaveLength(1);
+    expect(findings[0].rule).toBe("zip-extracted-dangerous-extension");
+  });
+
   test("supports custom blocked extensions via factory", async () => {
     const customValidator = createDangerousExtensionGuardValidator({
       blockedExtensions: [".iso", ".dmg"],
