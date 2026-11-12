@@ -25,7 +25,21 @@
  */
 
 const PATH_TRAVERSAL_PATTERN = /\.\.[\\/]/;
-const WINDOWS_DRIVE_PATTERN = /^[a-zA-Z]:\\/;
+// Absolute Windows drive paths ("C:\..." or "C:/..."), UNC paths
+// ("\\server\share" or "//server/share"), and Unix absolute paths.
+const WINDOWS_DRIVE_PATTERN = /^[a-zA-Z]:[\\/]/;
+const UNC_PATH_PATTERN = /^[\\/]{2}[^\\/]/;
+
+/**
+ * A ".." path segment is traversal even when it is the whole filename or
+ * the final segment ("..", "docs/..") — the regex above only catches a
+ * ".." that is followed by a separator.
+ */
+function traversalMethod(value) {
+  if (PATH_TRAVERSAL_PATTERN.test(value)) return "literal";
+  if (value.split(/[\\/]/).some((segment) => segment === "..")) return "dot-dot-segment";
+  return null;
+}
 
 // Unicode characters that visually resemble a slash but aren't the real
 // ASCII / or \ — a way to sneak ".." past a check that only looks for
@@ -41,8 +55,9 @@ const SLASH_LOOKALIKES = ["\u2215", "\u2044", "\uFF0F", "\uFF3C"];
  * "%252e%252e%252f"). Returns which method caught it, or null.
  */
 function detectPathTraversal(filename) {
-  if (PATH_TRAVERSAL_PATTERN.test(filename)) {
-    return { method: "literal" };
+  const literal = traversalMethod(filename);
+  if (literal) {
+    return { method: literal };
   }
 
   let swapped = filename;
@@ -50,8 +65,11 @@ function detectPathTraversal(filename) {
     swapped = swapped.split(lookalike).join("/");
   }
 
-  if (swapped !== filename && PATH_TRAVERSAL_PATTERN.test(swapped)) {
-    return { method: "unicode-slash-lookalike" };
+  if (swapped !== filename) {
+    const lookalike = traversalMethod(swapped);
+    if (lookalike) {
+      return { method: "unicode-slash-lookalike" };
+    }
   }
 
   let decoded = filename;
@@ -64,7 +82,7 @@ function detectPathTraversal(filename) {
     }
     if (next === decoded) break; // nothing left to decode
     decoded = next;
-    if (PATH_TRAVERSAL_PATTERN.test(decoded)) {
+    if (traversalMethod(decoded)) {
       return { method: "percent-encoded", decodedValue: decoded };
     }
   }
@@ -102,7 +120,13 @@ export const FilenameSanitizerValidator = {
 
     const traversal = detectPathTraversal(filename);
     
-    if (traversal || filename.startsWith("/") || WINDOWS_DRIVE_PATTERN.test(filename)) {
+    if (
+      traversal ||
+      filename.startsWith("/") ||
+      filename.startsWith("\\") ||
+      WINDOWS_DRIVE_PATTERN.test(filename) ||
+      UNC_PATH_PATTERN.test(filename)
+    ) {
       findings.push({
         rule: "filename-path-traversal",
         severity: "extreme",
