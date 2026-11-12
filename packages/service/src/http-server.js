@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import http from "node:http";
+import { pathToFileURL } from "node:url";
 import { fileTypeFromBuffer } from "file-type";
 import { UploadSecurityService } from "./upload-service.js";
 import { QuarantineStore } from "@secureupload/quarantine";
@@ -316,9 +317,13 @@ export function createServer(service = createDefaultService()) {
   return server;
 }
 
+export function isDirectExecution(moduleUrl, entryPath) {
+  return typeof entryPath === "string" && moduleUrl === pathToFileURL(entryPath).href;
+}
+
 // Only start listening when this file is run directly (`node http-server.js`),
 // not when it's imported by a test.
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isDirectExecution(import.meta.url, process.argv[1])) {
   const devMode = process.env.DEV_MODE === "true";
   const hasClamd = Boolean(
     (process.env.CLAMD_HOST && process.env.CLAMD_PORT) || process.env.CLAMD_SOCKET_PATH
