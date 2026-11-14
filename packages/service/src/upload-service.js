@@ -201,6 +201,7 @@ export class UploadSecurityService {
       anomaly: Number.isFinite(ml.anomalyScore) ? ml : null,
       findings: context.findings,
       sandbox: sandbox.result,
+      riskOverride: riskScore,
     });
 
     // AI receives structured evidence only. Raw file bytes are never sent.

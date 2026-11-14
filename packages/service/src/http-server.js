@@ -128,6 +128,7 @@ function sendJson(res, statusCode, body) {
   res.writeHead(statusCode, {
     "Content-Type": "application/json",
     "Content-Length": Buffer.byteLength(payload),
+    "X-Content-Type-Options": "nosniff",
   });
   res.end(payload);
 }

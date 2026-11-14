@@ -47,7 +47,11 @@ export function createDangerousExtensionGuardValidator(options = {}) {
       const filename = meta.filename || "";
       if (!filename) return findings;
 
-      const ext = path.extname(filename).toLowerCase();
+      // Windows silently strips trailing dots and spaces when creating a file,
+      // so "virus.exe." / "virus.exe " land on disk as "virus.exe". Strip them
+      // before taking the extension so the disguised name cannot slip through.
+      const normalizedFilename = filename.replace(/[. ]+$/, "");
+      const ext = path.extname(normalizedFilename).toLowerCase();
       if (blocked.has(ext)) {
         findings.push({
           rule: "zip-extracted-dangerous-extension",

@@ -117,6 +117,22 @@ describe("ZipSlipGuardValidator", () => {
     expect(findings).toEqual([]);
   });
 
+  test("flags an entry name that is exactly ..", async () => {
+    const zip = buildZip({ "..": Buffer.from("evil") });
+    const findings = await ZipSlipGuardValidator.validate(zip);
+    expect(findings).toHaveLength(1);
+    expect(findings[0].rule).toBe("zip-slip-path-traversal");
+    expect(findings[0].severity).toBe("extreme");
+  });
+
+  test("flags an entry name ending in a .. segment", async () => {
+    const zip = buildZip({ "docs/..": Buffer.from("evil") });
+    const findings = await ZipSlipGuardValidator.validate(zip);
+    expect(findings).toHaveLength(1);
+    expect(findings[0].rule).toBe("zip-slip-path-traversal");
+    expect(findings[0].severity).toBe("extreme");
+  });
+
   test("flags an entry name containing literal path traversal", async () => {
     const zip = buildZip({ "../../etc/passwd": Buffer.from("evil") });
     const findings = await ZipSlipGuardValidator.validate(zip);

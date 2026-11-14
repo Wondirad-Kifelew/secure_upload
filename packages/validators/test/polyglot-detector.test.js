@@ -357,6 +357,20 @@ describe("PolyglotDetectorValidator — Full Enterprise Suite", () => {
       expect(hit.message).toContain("plain text");
     });
 
+    test("trailing payload that itself ends with FFD9 is still detected", async () => {
+      // The appended data ends with its own EOI marker. A lastIndexOf(FFD9)
+      // implementation would treat the very end of the file as the image end
+      // and see zero trailing bytes, hiding the payload.
+      const payload = Buffer.concat([Buffer.from("MZ"), Buffer.alloc(16, 0x90)]);
+      const buffer = Buffer.concat([jpegBuffer(), payload, Buffer.from([0xff, 0xd9])]);
+      const findings = await PolyglotDetectorValidator.validate(buffer);
+      const hit = findings.find((f) => f.rule === "polyglot-trailing-payload");
+      expect(hit).toBeDefined();
+      expect(hit.severity).toBe("high");
+      expect(hit.details.hiddenType).toBe("program");
+      expect(hit.details.trailingBytes).toBe(payload.length + 2);
+    });
+
     test("trailing data starting with MZ produces kind program with high severity", async () => {
       const buffer = Buffer.concat([jpegBuffer(), Buffer.from("MZ"), Buffer.alloc(16, 0x90)]);
       const findings = await PolyglotDetectorValidator.validate(buffer);

@@ -17,6 +17,7 @@ import {
   MimeMismatchValidator,
   ZipBombGuardValidator,
   PolyglotDetectorValidator,
+  ImageGuardValidator,
   ZipSlipGuardValidator,
   EntryCountGuardValidator,
   DuplicateEntryGuardValidator,
@@ -32,11 +33,19 @@ import {
   NestedZipInspectorValidator
 } from "@secureupload/validators";
 import { ScanPipeline, createClamAVScanner, createYaraScanner } from "@secureupload/scanners";
-import { ImageSanitizer, PdfSanitizer } from "@secureupload/cdr";
+import { ImageSanitizer, PdfSanitizer, OoxmlSanitizer } from "@secureupload/cdr";
 import { evaluateQuarantine, QuarantineStore } from "@secureupload/quarantine";
 
 const CLAMD_SOCKET_PATH = "/var/run/clamav/clamd.ctl";
 const YARA_RULES_PATH = "packages/scanners/test/fixtures/test-rules.yar";
+const OOXML_MIME_TYPES = new Set([
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  "application/vnd.ms-word.document.macroEnabled.12",
+  "application/vnd.ms-excel.sheet.macroEnabled.12",
+  "application/vnd.ms-powerpoint.presentation.macroEnabled.12",
+]);
 
 const [, , filePath, declaredMimeType] = process.argv;
 
@@ -55,6 +64,7 @@ const validationPipeline = new ValidationPipeline([
   MimeMismatchValidator,
   ZipBombGuardValidator,
   PolyglotDetectorValidator,
+  ImageGuardValidator,
   ZipSlipGuardValidator,
   EntryCountGuardValidator,
   DuplicateEntryGuardValidator,
@@ -149,6 +159,24 @@ if (declaredMimeType === "application/pdf") {
       : `${outPath} (${buffer.length} → ${result.buffer.length} bytes)`;
   } catch (err) {
     console.warn(`  [warning] ${PdfSanitizer.name} could not run: ${err.message}`);
+  }
+}
+
+// Stage 4b: CDR — Office Open XML (.docx/.xlsx/.pptx and macro-enabled forms)
+if (OOXML_MIME_TYPES.has(declaredMimeType)) {
+  try {
+    const result = await OoxmlSanitizer.sanitize(buffer);
+    for (const finding of result.findings) {
+      context.addFinding({ ...finding, stage: "cdr", source: OoxmlSanitizer.name });
+    }
+    const { dir, name, ext } = path.parse(filePath);
+    const outPath = path.join(dir, `${name}.sanitized${ext}`);
+    fs.writeFileSync(outPath, result.buffer);
+    sanitizedInfo = sanitizedInfo
+      ? `${sanitizedInfo}\n  sanitized copy written to: ${outPath}`
+      : `${outPath} (${buffer.length} → ${result.buffer.length} bytes)`;
+  } catch (err) {
+    console.warn(`  [warning] ${OoxmlSanitizer.name} could not run: ${err.message}`);
   }
 }
 

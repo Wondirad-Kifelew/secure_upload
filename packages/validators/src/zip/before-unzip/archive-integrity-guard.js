@@ -27,12 +27,12 @@ function readAllEntries(buffer) {
       { lazyEntries: true, decodeStrings: false, validateEntrySizes: false },
       (err, zipfile) => {
         if (err) return reject(err);
-        zipfile.readEntry();
         zipfile.on("entry", () => {
           zipfile.readEntry();
         });
         zipfile.on("end", () => resolve());
         zipfile.on("error", (e) => reject(e));
+        zipfile.readEntry();
       }
     );
   });

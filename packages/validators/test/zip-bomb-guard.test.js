@@ -16,6 +16,42 @@ function buildZip(files) {
   });
 }
 
+/**
+ * Builds a zip whose directory metadata claims arbitrary compressed /
+ * uncompressed sizes, without having to actually create that much data.
+ * Used to test malformed size fields that a real archiver never emits.
+ */
+function buildZipWithClaimedSizes({ name, compressedSize, uncompressedSize, content = Buffer.alloc(0) }) {
+  const nameBuf = Buffer.from(name, "utf8");
+
+  const localHeader = Buffer.alloc(30);
+  localHeader.writeUInt32LE(0x04034b50, 0);
+  localHeader.writeUInt16LE(20, 4);
+  localHeader.writeUInt32LE(compressedSize, 18);
+  localHeader.writeUInt32LE(uncompressedSize, 22);
+  localHeader.writeUInt16LE(nameBuf.length, 26);
+  const localEntry = Buffer.concat([localHeader, nameBuf, content]);
+
+  const centralHeader = Buffer.alloc(46);
+  centralHeader.writeUInt32LE(0x02014b50, 0);
+  centralHeader.writeUInt16LE(20, 4);
+  centralHeader.writeUInt16LE(20, 6);
+  centralHeader.writeUInt32LE(compressedSize, 20);
+  centralHeader.writeUInt32LE(uncompressedSize, 24);
+  centralHeader.writeUInt16LE(nameBuf.length, 28);
+  centralHeader.writeUInt32LE(0, 42);
+  const centralEntry = Buffer.concat([centralHeader, nameBuf]);
+
+  const end = Buffer.alloc(22);
+  end.writeUInt32LE(0x06054b50, 0);
+  end.writeUInt16LE(1, 8);
+  end.writeUInt16LE(1, 10);
+  end.writeUInt32LE(centralEntry.length, 12);
+  end.writeUInt32LE(localEntry.length, 16);
+
+  return Buffer.concat([localEntry, centralEntry, end]);
+}
+
 describe("ZipBombGuardValidator", () => {
   test("has the expected Validator shape", () => {
     expect(ZipBombGuardValidator.name).toBe("Zip Bomb Guard");
@@ -47,6 +83,20 @@ describe("ZipBombGuardValidator", () => {
     expect(finding.severity).toBe("extreme");
     expect(finding.details.fileName).toBe("zeros.bin");
     expect(finding.details.ratio).toBeGreaterThan(100);
+  });
+
+  test("flags an entry claiming data from zero compressed bytes", async () => {
+    const zip = buildZipWithClaimedSizes({
+      name: "impossible.bin",
+      compressedSize: 0,
+      uncompressedSize: 1024,
+    });
+
+    const findings = await ZipBombGuardValidator.validate(zip);
+    const finding = findings.find((f) => f.rule === "zip-bomb-compression-ratio");
+    expect(finding).toBeDefined();
+    expect(finding.severity).toBe("extreme");
+    expect(finding.details.ratio).toBe(Infinity);
   });
 
   test("flags total uncompressed size exceeding a configured limit", async () => {
