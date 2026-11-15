@@ -15,6 +15,8 @@
 
 [Watch the project walkthrough on YouTube](https://youtu.be/Fgevl1i8rBM)
 
+[Betselot – Personal Contribution video](https://youtu.be/lLSMBiDIqF8)
+
 [Download the video (mp4)](docs/secure_upload_walkthrough.mp4)
 
 An open-source, self-hostable pipeline that checks untrusted file uploads **before** they reach your app.
