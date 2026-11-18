@@ -17,6 +17,8 @@
 
 [Download the video (mp4)](docs/secure_upload_walkthrough.mp4)
 
+[Additional walkthrough](https://youtu.be/bFiOaIrixaQ?si=X_uJh-RPbKQ7DVyp)
+
 An open-source, self-hostable pipeline that checks untrusted file uploads **before** they reach your app.
 Send a file over HTTP; get back a verdict and, when it is safe, a **cleaned copy** of the file.
 Works from any language — it is just a `POST` request.
