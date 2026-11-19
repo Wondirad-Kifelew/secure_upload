@@ -13,7 +13,7 @@
 
 ## Video Walkthrough
 
-[Watch the project walkthrough on YouTube](https://youtu.be/Fgevl1i8rBM)
+[Wondirad - Watch the project walkthrough on YouTube](https://youtu.be/Fgevl1i8rBM)
 
 [Bisrat – Personal Contribution video](https://youtu.be/RYsqwDCvoM4)
 
