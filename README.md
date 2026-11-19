@@ -15,6 +15,8 @@
 
 [Watch the project walkthrough on YouTube](https://youtu.be/Fgevl1i8rBM)
 
+[Bisrat – Personal Contribution video](https://youtu.be/RYsqwDCvoM4)
+
 [Betselot – Personal Contribution video](https://youtu.be/lLSMBiDIqF8)
 
 [Download the video (mp4)](docs/secure_upload_walkthrough.mp4)
